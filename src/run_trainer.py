@@ -9,7 +9,7 @@ num_instances = 10
 pythonDir = os.getenv('LOCALAPPDATA') + '\RLBotGUIX\Python37\python.exe'
 fileDir = 'src/trainer.py'
 
-
+#Needs to be changed to a seperate thread and a pipe so it can be killed after an amount of time
 def readLinesWait(wait_secs: int, break_line: str = "Done", break_string: str = "training for "):
     lines = []
     if wait_secs > 0:
