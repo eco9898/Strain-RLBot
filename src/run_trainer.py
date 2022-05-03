@@ -49,7 +49,6 @@ while True:
             count = curr_count
             print(">Instances found:" , count)
             lines.extend(readLinesWait(wait_time - (time() - start)))
-            minimiseRL()
         else:
             break
     done = False
@@ -70,6 +69,7 @@ while True:
             print(">Killing RL instance", pid)
             os.kill(pid, signal.SIGTERM)
     else:
+        minimiseRL()
         while True:
             print(">Finished parsing trainer")
             readLinesWait(1)
