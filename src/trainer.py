@@ -36,7 +36,7 @@ if __name__ == '__main__':  # Required for multiprocessing
     print(n_env)
     batch_size = int(((400_000//(n_env))*(n_env))/num_instances) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
     print(batch_size)
-    steps = batch_size*num_instances*10 #making sure the experience counts line up properly
+    steps = (1_000_000//batch_size)*batch_size #making sure the experience counts line up properly
     print(steps)
     training_interval = 5_000_000
     print(training_interval)
