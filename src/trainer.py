@@ -1,3 +1,4 @@
+import os, signal
 import numpy as np
 from rlgym.envs import Match
 from stable_baselines3 import PPO
@@ -13,7 +14,6 @@ from rlgym.utils.reward_functions.common_rewards.player_ball_rewards import *
 from rlgym.utils.reward_functions.common_rewards.ball_goal_rewards import *
 from rlgym.utils.reward_functions.common_rewards.conditional_rewards import *
 from rlgym.utils.reward_functions import CombinedReward
-from rlgym_tools.extra_rewards.kickoff_reward import KickoffReward
 
 from advanced_padder import AdvancedObsPadder
 from discrete_act import DiscreteAction
@@ -30,7 +30,7 @@ if __name__ == '__main__':  # Required for multiprocessing
     if self_play:
         agents_per_match = 2*team_size
     else:
-         agents_per_match = team_size
+        agents_per_match = team_size
     num_instances = 10
     n_env = agents_per_match * num_instances
     print(n_env)
@@ -137,66 +137,74 @@ if __name__ == '__main__':  # Required for multiprocessing
     #if paging:
         #wait_time=40
 
-    env = SB3MultipleInstanceEnv(get_match, num_instances, force_paging=paging, wait_time=wait_time) #or 40            # Start instances, waiting 60 seconds between each
-    env = VecCheckNan(env)                                # Optional
-    env = VecMonitor(env)                                 # Recommended, logs mean reward and ep_len to Tensorboard
-    env = VecNormalize(env, norm_obs=False, gamma=gamma)  # Highly recommended, normalizes rewards
+    while True:
+        try:
+            env = SB3MultipleInstanceEnv(get_match, num_instances, force_paging=paging, wait_time=wait_time) #or 40            # Start instances, waiting 60 seconds between each
+            env = VecCheckNan(env)                                # Optional
+            env = VecMonitor(env)                                 # Recommended, logs mean reward and ep_len to Tensorboard
+            env = VecNormalize(env, norm_obs=False, gamma=gamma)  # Highly recommended, normalizes rewards
 
-    try:
-        model = PPO.load(
-            "src/models/exit_save",
-            env,
-            device="auto",
-            #custom_objects={"n_envs": env.num_envs}, #automatically adjusts to users changing instance count, may encounter shaping error otherwise
-            #If you need to adjust parameters mid training, you can use the below example as a guide
-            custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None}
-        )
-        print("Loaded previous exit save.")
-    except:
-        print("No saved model found, creating new model.")
-        from torch.nn import Tanh
-        policy_kwargs = dict(
-            activation_fn=Tanh,
-            net_arch=[512, 512, dict(pi=[256, 256, 256], vf=[256, 256, 256])],
-        )
+            try:
+                model = PPO.load(
+                    "src/models/exit_save",
+                    env,
+                    device="auto",
+                    #custom_objects={"n_envs": env.num_envs}, #automatically adjusts to users changing instance count, may encounter shaping error otherwise
+                    #If you need to adjust parameters mid training, you can use the below example as a guide
+                    custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None}
+                )
+                print("Loaded previous exit save.")
+            except:
+                print("No saved model found, creating new model.")
+                from torch.nn import Tanh
+                policy_kwargs = dict(
+                    activation_fn=Tanh,
+                    net_arch=[512, 512, dict(pi=[256, 256, 256], vf=[256, 256, 256])],
+                )
 
-        model = PPO(
-            MlpPolicy,
-            env,
-            n_epochs=10,                 # PPO calls for multiple epochs
-            policy_kwargs=policy_kwargs,
-            learning_rate=5e-5,          # Around this is fairly common for PPO
-            ent_coef=0.01,               # From PPO Atari
-            vf_coef=1.,                  # From PPO Atari
-            gamma=gamma,                 # Gamma as calculated using half-life
-            verbose=3,                   # Print out all the info as we're going
-            batch_size=batch_size,             # Batch size as high as possible within reason
-            n_steps=steps,                # Number of steps to perform before optimizing network
-            tensorboard_log="src/logs",  # `tensorboard --logdir out/logs` in terminal to see graphs
-            device="auto"                # Uses GPU if available
-        )
+                model = PPO(
+                    MlpPolicy,
+                    env,
+                    n_epochs=10,                 # PPO calls for multiple epochs
+                    policy_kwargs=policy_kwargs,
+                    learning_rate=5e-5,          # Around this is fairly common for PPO
+                    ent_coef=0.01,               # From PPO Atari
+                    vf_coef=1.,                  # From PPO Atari
+                    gamma=gamma,                 # Gamma as calculated using half-life
+                    verbose=3,                   # Print out all the info as we're going
+                    batch_size=batch_size,             # Batch size as high as possible within reason
+                    n_steps=steps,                # Number of steps to perform before optimizing network
+                    tensorboard_log="src/logs",  # `tensorboard --logdir out/logs` in terminal to see graphs
+                    device="auto"                # Uses GPU if available
+                )
 
-    # Save model every so often
-    # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
-    # This saves to specified folder with a specified name
-    callback = CheckpointCallback(round(1_000_000 / env.num_envs), save_path="src/models", name_prefix="rl_model") # backup every 5 mins
-    #80000 a minute?
+            # Save model every so often
+            # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
+            # This saves to specified folder with a specified name
+            callback = CheckpointCallback(round(1_000_000 / env.num_envs), save_path="src/models", name_prefix="rl_model") # backup every 5 mins
+            #80000 a minute?
 
-    try:
-        mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
-        while True:
-            new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
-            print("training for %s timesteps" % new_training_interval)
-            #may need to reset timesteps when you're running a different number of instances than when you saved the model
-            model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
+            try:
+                mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
+                while True:
+                    new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
+                    print("training for %s timesteps" % new_training_interval)
+                    #may need to reset timesteps when you're running a different number of instances than when you saved the model
+                    model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
+                    exit_save(model)
+                    if model.num_timesteps >= mmr_model_target_count:
+                        model.save(f"src/mmr_models/{model.num_timesteps}")
+                        mmr_model_target_count += mmr_save_frequency
+
+            except KeyboardInterrupt:
+                print("Exiting training")
+
+            print("Saving model")
             exit_save(model)
-            if model.num_timesteps >= mmr_model_target_count:
-                model.save(f"src/mmr_models/{model.num_timesteps}")
-                mmr_model_target_count += mmr_save_frequency
-
-    except KeyboardInterrupt:
-        print("Exiting training")
-
-    print("Saving model")
-    exit_save(model)
-    print("Save complete")
+            print("Save complete")
+        except KeyboardInterrupt:
+            break
+        except:
+            pass
+    os.kill(os.getppid(), signal.SIGKILL)
+    
