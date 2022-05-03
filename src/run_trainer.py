@@ -10,7 +10,7 @@ pythonDir = os.getenv('LOCALAPPDATA') + '\RLBotGUIX\Python37\python.exe'
 fileDir = 'src/trainer.py'
 
 
-def readLinesWait(wait_secs: int, break_string: str = "Done"):
+def readLinesWait(wait_secs: int, break_line: str = "Done", break_string: str = "training for "):
     lines = []
     if wait_secs > 0:
         start = time()
@@ -20,7 +20,9 @@ def readLinesWait(wait_secs: int, break_string: str = "Done"):
             if line != "":
                 lines.append(line)
                 print(line)
-            if line == break_string:
+            if line == break_line:
+                break
+            if break_string in line:
                 break
             sleep(0.1)
     return lines
@@ -55,7 +57,7 @@ while True:
     if count == num_instances:
         print(">Waiting to start")
         #this will block and is pointless unless an error is actually thrown, if trainer just hangs this wont stop restart it until it crashes
-        lines.extend(readLinesWait(wait_time))
+        lines.extend(readLinesWait(wait_time*2))
         while len(lines) > 0:
             m = re.search('training for (.+?) timesteps', lines.pop(0))
             if m:

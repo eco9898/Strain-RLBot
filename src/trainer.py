@@ -126,7 +126,7 @@ if __name__ == '__main__':  # Required for multiprocessing
             (1.0, 1.0, 3.0, 5.0, 1.0, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0, 2.0, 1.4)),
             self_play=self_play, #play against its self
             #time out after 50 seconds encourage kickoff
-            terminal_conditions=[TimeoutCondition(fps * 20), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition(), BallTouchedCondition()],
+            terminal_conditions=[TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()],
             obs_builder=AdvancedObsPadder(3),  # Not that advanced, good default
             state_setter=DefaultState(),  # Resets to kickoff position
             action_parser=DiscreteAction()  # Discrete > Continuous don't @ me
