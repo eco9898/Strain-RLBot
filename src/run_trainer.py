@@ -2,7 +2,7 @@ import os, signal
 from time import sleep, time
 import subprocess
 import re
-from trainer_classes import getRLInstances
+from trainer_classes import getRLInstances, minimiseRL
 wait_time=22
 num_instances = 10
 
@@ -46,9 +46,10 @@ while True:
             offset = curr_count - 1
         if curr_count > count:
             count = curr_count - offset
-            lines.extend(readLinesWait(wait_time - (time() - start)))
             count = curr_count
             print(">Instances found:" , count)
+            lines.extend(readLinesWait(wait_time - (time() - start)))
+            minimiseRL()
         else:
             break
     done = False
