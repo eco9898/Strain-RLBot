@@ -1,9 +1,34 @@
 import numpy as np
+import psutil
+#import win32gui, win32con
 from rlgym.utils.common_values import ORANGE_TEAM, BLUE_TEAM, ORANGE_GOAL_BACK, BLUE_GOAL_BACK, ORANGE_GOAL_CENTER, BLUE_GOAL_CENTER, BACK_WALL_Y, CAR_MAX_SPEED, BALL_MAX_SPEED
 from rlgym.utils.reward_functions.common_rewards.conditional_rewards import ConditionalRewardFunction
 from rlgym.utils import RewardFunction, math
 from rlgym.utils.gamestates import PlayerData, GameState
 from typing import List
+
+def GetRLInstancePIDs(instanceCount):
+    '''
+    Get a list of all the PIDs of a all the running process whose name is RocketLeague.exe
+    Minimise them as they pop up
+    '''
+    minimisedPIDs = []
+    while len(minimisedPIDs < instanceCount):
+        listOfProcessObjects = []
+        #Iterate over the all the running process
+        for proc in psutil.process_iter():
+            try:
+                pinfo = proc.as_dict(attrs=['pid', 'name'])
+                # Check if process name contains the given name string.
+                if "RocketLeague.exe" in pinfo['name'].lower() :
+                    listOfProcessObjects.append(pinfo)
+            except (psutil.NoSuchProcess, psutil.AccessDenied , psutil.ZombieProcess):
+                pass
+        return listOfProcessObjects
+        #for proc in listOfProcessObjects:
+        #    if not proc in minimisedPIDs:
+        #        win32gui.FindWindow("RocketLeague.exe", None)
+        
 
 class TeamSpacingReward(RewardFunction):
     def __init__(self, min_spacing: float = 1000) -> None:

@@ -13,7 +13,7 @@ class Agent:
             "n_envs": 1,
         }
         #print(str(_path) + '\\models\\exit_save')
-        self.actor = PPO.load(str(_path) + '\\models\\exit_save', device='auto', custom_objects=custom_objects)
+        self.actor = PPO.load(str(_path) + '/models/exit_save', device='auto', custom_objects=custom_objects)
         self.parser = DiscreteAction()
 
 

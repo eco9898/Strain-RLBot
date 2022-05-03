@@ -31,12 +31,12 @@ if __name__ == '__main__':  # Required for multiprocessing
         agents_per_match = 2*team_size
     else:
          agents_per_match = team_size
-    num_instances = 14
+    num_instances = 10
     n_env = agents_per_match * num_instances
     print(n_env)
-    batch_size = int(((400_000//(n_env))*(n_env))/num_instances) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
+    batch_size = (100_000//(n_env))*(n_env) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
     print(batch_size)
-    steps = (1_000_000//batch_size)*batch_size #making sure the experience counts line up properly
+    steps = (500_000//batch_size)*batch_size #making sure the experience counts line up properly
     print(steps)
     training_interval = 5_000_000
     print(training_interval)
@@ -108,7 +108,6 @@ if __name__ == '__main__':  # Required for multiprocessing
                 RewardIfKickoff(kickoffRewards),
                 VelocityReward(),
                 FaceBallReward(),
-                SaveBoostReward(),
                 EventReward(
                     team_goal=100.0,
                     goal=20.0,
@@ -121,9 +120,10 @@ if __name__ == '__main__':  # Required for multiprocessing
                 TouchBallReward(1.2),
                 TeamSpacingReward(),
                 FlipReward(),
+                SaveBoostReward(),
                 pickupBoost()
             ),
-            (1.0, 1.0, 3.0, 5.0, 1.0, 1.0, 2.0, 1.0, 1.5, 1.0, 1.0, 1.0, 1.4)),
+            (1.0, 1.0, 3.0, 5.0, 1.0, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0, 2.0, 1.4)),
             self_play=self_play, #play against its self
             #time out after 50 seconds encourage kickoff
             terminal_conditions=[TimeoutCondition(fps * 20), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition(), BallTouchedCondition()],
@@ -134,8 +134,8 @@ if __name__ == '__main__':  # Required for multiprocessing
 
     paging = True
     wait_time=22
-    if paging:
-        wait_time=40
+    #if paging:
+        #wait_time=40
 
     env = SB3MultipleInstanceEnv(get_match, num_instances, force_paging=paging, wait_time=wait_time) #or 40            # Start instances, waiting 60 seconds between each
     env = VecCheckNan(env)                                # Optional
@@ -183,12 +183,12 @@ if __name__ == '__main__':  # Required for multiprocessing
     #80000 a minute?
 
     try:
-        mmr_model_target_count = model.num_timesteps + mmr_save_frequency
-        training_interval = training_interval - (model.num_timesteps % training_interval)
+        mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
         while True:
-            print("training for %s timesteps" % training_interval)
+            new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
+            print("training for %s timesteps" % new_training_interval)
             #may need to reset timesteps when you're running a different number of instances than when you saved the model
-            model.learn(training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
+            model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
             exit_save(model)
             if model.num_timesteps >= mmr_model_target_count:
                 model.save(f"src/mmr_models/{model.num_timesteps}")
