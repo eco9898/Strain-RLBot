@@ -68,7 +68,7 @@ if __name__ == '__main__':  # Required for multiprocessing
             RewardIfTouchedLast(VelocityBallToGoalReward()),
             RewardIfClosestToBall(AlignBallGoal(0,1), True),
         ),
-        (1.0, 0.2, 1.0, 1.0, 0.8))
+        (2.0, 0.2, 1.0, 1.0, 0.8))
 
     defendRewards = CombinedReward(
         (
@@ -99,7 +99,7 @@ if __name__ == '__main__':  # Required for multiprocessing
                         LiuDistancePlayerToBallReward(),
                         FlipReward(),
                     ),
-                    (40.0, 1.0, 2.0, 0.2)
+                    (200.0, 1.0, 2.0, 2.0)
                 ),
                 team_only=True
             ),
@@ -135,12 +135,13 @@ if __name__ == '__main__':  # Required for multiprocessing
                 ),
                 JumpTouchReward(),
                 TouchBallReward(1.2),
-                TeamSpacingReward(),
+                TeamSpacingReward(1500),
                 FlipReward(),
                 SaveBoostReward(),
-                pickupBoost()
+                pickupBoost(),
+                useBoost()
             ),
-            (1.0, 1.0, 3.0, 5.0, 1.0, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0, 2.0, 1.4)),
+            (1.0, 1.0, 3.0, 5.0, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 1.0, 1.0, 1.4, 3.0)),
             self_play=self_play, #play against its self
             #time out after 50 seconds encourage kickoff
             terminal_conditions=[TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()],

@@ -102,6 +102,24 @@ class pickupBoost(RewardFunction):
         self.lastBoost = player.boost_amount
         return 0
 
+class useBoost(RewardFunction):
+    def __init__(self) -> None:
+        super().__init__()
+        self.lastBoost = 0
+
+    def reset(self, initial_state: GameState):
+        self.lastBoost = 0
+
+    def get_reward(
+        self, player: PlayerData, state: GameState, previous_action: np.ndarray
+    ) -> float:
+        if player.boost_amount < self.lastBoost:
+            reward = (self.lastBoost - player.boost_amount)/100
+            self.lastBoost = player.boost_amount
+            return reward
+        self.lastBoost = player.boost_amount
+        return 0
+
 class LiuDistancePlayerToGoalReward(RewardFunction):
     def __init__(self, own_goal=True):
         super().__init__()
