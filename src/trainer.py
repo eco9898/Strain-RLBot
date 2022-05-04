@@ -32,6 +32,17 @@ if num_instances > MAX_INSTANCES_NO_PAGING:
 wait_time=WAIT_TIME_NO_PAGING
 if paging:
     wait_time=WAIT_TIME_PAGING
+
+def killRL():
+    PIDs = getRLInstances()
+    while len(PIDs) > 0:
+        pid = PIDs.pop()["pid"]
+        print(">Killing RL instance", pid)
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except:
+            print(">Failed")
+
 def start_training(send_messages: multiprocessing.Queue):
     global num_instances, paging, wait_time, model
     frame_skip = 12          # Number of ticks to repeat an action
@@ -266,14 +277,7 @@ if __name__ == "__main__":
         if count != num_instances or not done:
             print(">Killing trainer")
             trainer.terminate()
-            PIDs = getRLInstances()
-            while len(PIDs) > 0:
-                pid = PIDs.pop()["pid"]
-                print(">Killing RL instance", pid)
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except:
-                    print(">Failed")
+            killRL()
         else:
             minimiseRL()
             try:
@@ -286,3 +290,4 @@ if __name__ == "__main__":
                 while trainer.is_alive():
                     sleep(1)
                 break
+    killRL()
