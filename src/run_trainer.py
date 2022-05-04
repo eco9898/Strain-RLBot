@@ -9,7 +9,7 @@ fileDir = 'src/trainer.py'
 num_instances = 5
 
 #Needs to be changed to a seperate thread and a pipe so it can be killed after an amount of time
-def readLinesWait(wait_secs: int = -1, break_line: str = "Done", break_strings = [">Training for "], lines_to_read: int = -1, print_output = True, ignore_trainer = True):
+def readLinesWait(wait_secs: int = -1, break_line: str = "NULL", break_strings = ["NULL"], lines_to_read: int = -1, print_output = True, ignore_trainer = True):
     lines = []
     if wait_secs > 0 or lines_to_read > 0:
         start = time()
@@ -62,7 +62,7 @@ while True:
     while count < num_instances:
         start = time()
         print(">Parsing instance:" , (count + 1))
-        lines.extend(readLinesWait(10))
+        lines.extend(readLinesWait(10), break_line="Done")
         curr_count = 0
         while len(lines) > 0:
             m = re.search('Found (.+?) processes', lines.pop(0))
@@ -84,7 +84,7 @@ while True:
     if count == num_instances:
         print(">Waiting to start")
         #this will block and is pointless unless an error is actually thrown, if trainer just hangs this wont stop restart it until it crashes
-        lines.extend(readLinesWait(wait_time*2))
+        lines.extend(readLinesWait(wait_time*2), break_strings=[">Training for"])
         while len(lines) > 0:
             m = re.search('>Training for (.+?) timesteps', lines.pop(0))
             if m:
