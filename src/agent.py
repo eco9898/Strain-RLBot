@@ -1,7 +1,10 @@
 from stable_baselines3 import PPO
 import pathlib
 from discrete_act import DiscreteAction
+import glob
+import os.path
 
+use_latest = True
 
 class Agent:
     def __init__(self):
@@ -12,8 +15,15 @@ class Agent:
             "device": "auto",
             "n_envs": 1,
         }
-        #print(str(_path) + '\\models\\exit_save')
-        self.actor = PPO.load(str(_path) + '/models/exit_save', device='auto', custom_objects=custom_objects)
+        if use_latest:
+            folder_path = str(_path) + '\\models'
+            file_type = r'\*zip'
+            files = glob.glob(folder_path + file_type)
+            newest_model = max(files, key=os.path.getctime)[0:-4]
+
+            self.actor = PPO.load(newest_model, device='auto', custom_objects=custom_objects)
+        else:
+            self.actor = PPO.load(str(_path) + '/models/exit_save', device='auto', custom_objects=custom_objects)
         self.parser = DiscreteAction()
 
 
