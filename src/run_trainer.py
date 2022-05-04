@@ -3,37 +3,57 @@ from time import sleep, time
 import subprocess
 import re
 from trainer_classes import getRLInstances, minimiseRL
-wait_time=22
 num_instances = 10
 
 pythonDir = os.getenv('LOCALAPPDATA') + '\RLBotGUIX\Python37\python.exe'
 fileDir = 'src/trainer.py'
 
 #Needs to be changed to a seperate thread and a pipe so it can be killed after an amount of time
-def readLinesWait(wait_secs: int, break_line: str = "Done", break_string: str = "training for "):
+def readLinesWait(wait_secs: int = -1, break_line: str = "Done", break_string: str = ">Training for ", lines_to_read: int = -1, print_output = True, ignore_trainer = True):
     lines = []
-    if wait_secs > 0:
+    if wait_secs > 0 or lines_to_read > 0:
         start = time()
         line = ""
-        while time() - start < wait_secs:# or line != "":
+        while (wait_secs != -1 and time() - start < wait_secs) or lines_to_read != 0:# or line != "":
             line = str(p.stdout.readline())[2:-5]
-            if line != "":
+            if line[0] == ">" and print_output and ignore_trainer:
+                print(">" + line)
+                #ignore trainer output
+            elif line != "":
                 lines.append(line)
-                print(line)
+                if print_output:
+                    print(line)
             if line == break_line:
                 break
             if break_string in line:
                 break
             sleep(0.1)
+            if lines_to_read > 0:
+                lines_to_read -=1
     return lines
 
 while True:
     print(">Starting trainer")
     subprocess.PIPE
-    p = subprocess.Popen(pythonDir + " " + fileDir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    p = subprocess.Popen(pythonDir + " " + fileDir + " " + str(num_instances), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    wait_time = 0
+    lines = []
+    while len(lines) == 0:
+        try:
+            lines = readLinesWait(lines_to_read=1, print_output=False, ignore_trainer=False) # wait for PIPE to open
+        except:
+            lines = []
+    try:
+        wait_time = int(lines[0].replace(">Wait time: ", ""))
+        lines.pop(0)
+    except:
+        wait_time = 22
+    print(">Setup-info:")
+    print(">Wait time:         ", wait_time)
     count = 0
     offset = 0
-    lines = []
+    #Wait until setup is printed
+    readLinesWait(10, break_string="MMR")
     while count < num_instances:
         start = time()
         print(">Parsing instance:" , (count + 1))
@@ -69,9 +89,21 @@ while True:
         while len(PIDs) > 0:
             pid = PIDs.pop()["pid"]
             print(">Killing RL instance", pid)
-            os.kill(pid, signal.SIGTERM)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except:
+                print(">Failed")
     else:
         minimiseRL()
-        while True:
+        try:
             print(">Finished parsing trainer")
-            readLinesWait(1)
+            while True:
+                readLinesWait(1)
+        except KeyboardInterrupt:
+            try:
+                os.kill(p.pid, signal.CTRL_C_EVENT)
+                sleep(1) #wait to receive kill signal as well
+                break
+            except KeyboardInterrupt:
+                readLinesWait(10, "Save complete")
+                break

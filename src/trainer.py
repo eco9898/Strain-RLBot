@@ -1,4 +1,5 @@
-import os, signal
+from time import sleep
+import sys
 import numpy as np
 from rlgym.envs import Match
 from stable_baselines3 import PPO
@@ -19,6 +20,10 @@ from advanced_padder import AdvancedObsPadder
 from discrete_act import DiscreteAction
 from trainer_classes import *
 
+MAX_INSTANCES_NO_PAGING = 5
+WAIT_TIME_NO_PAGING = 22
+WAIT_TIME_PAGING = 40
+
 if __name__ == '__main__':  # Required for multiprocessing
     frame_skip = 12          # Number of ticks to repeat an action
     half_life_seconds = 5   # Easier to conceptualize, after this many seconds the reward discount is 0.5
@@ -31,17 +36,29 @@ if __name__ == '__main__':  # Required for multiprocessing
         agents_per_match = 2*team_size
     else:
         agents_per_match = team_size
-    num_instances = 10
+    try:
+        num_instances = int(sys.argv[1])
+    except:
+        num_instances = MAX_INSTANCES_NO_PAGING
+    paging = False
+    if num_instances > MAX_INSTANCES_NO_PAGING:
+        paging = True
+    wait_time=WAIT_TIME_NO_PAGING
+    if paging:
+        wait_time=WAIT_TIME_PAGING
+    print(">Wait time:        ", wait_time)
+    print("># of instances:   ", num_instances)
+    print(">Paging:           ", paging)
     n_env = agents_per_match * num_instances
-    print(n_env)
+    print("># of env:         ", n_env)
     batch_size = (100_000//(n_env))*(n_env) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
-    print(batch_size)
+    print(">Batch size:       ", batch_size)
     steps = (500_000//batch_size)*batch_size #making sure the experience counts line up properly
-    print(steps)
+    print(">Steps:            ", steps)
     training_interval = 5_000_000
-    print(training_interval)
+    print(">Training interval:", training_interval)
     mmr_save_frequency = 25_000_000
-    print(mmr_save_frequency)
+    print(">MMR frequency:    ", mmr_save_frequency)
 
     attackRewards = CombinedReward(
         (
@@ -132,10 +149,6 @@ if __name__ == '__main__':  # Required for multiprocessing
             action_parser=DiscreteAction()  # Discrete > Continuous don't @ me
         )
 
-    paging = True
-    wait_time=22
-    #if paging:
-        #wait_time=40
 
     while True:
         try:
@@ -153,9 +166,9 @@ if __name__ == '__main__':  # Required for multiprocessing
                     #If you need to adjust parameters mid training, you can use the below example as a guide
                     custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None}
                 )
-                print("Loaded previous exit save.")
+                print(">Loaded previous exit save.")
             except:
-                print("No saved model found, creating new model.")
+                print(">No saved model found, creating new model.")
                 from torch.nn import Tanh
                 policy_kwargs = dict(
                     activation_fn=Tanh,
@@ -188,7 +201,7 @@ if __name__ == '__main__':  # Required for multiprocessing
                 mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
                 while True:
                     new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
-                    print("training for %s timesteps" % new_training_interval)
+                    print(">Training for %s timesteps" % new_training_interval)
                     #may need to reset timesteps when you're running a different number of instances than when you saved the model
                     model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
                     exit_save(model)
@@ -197,14 +210,15 @@ if __name__ == '__main__':  # Required for multiprocessing
                         mmr_model_target_count += mmr_save_frequency
 
             except KeyboardInterrupt:
-                print("Exiting training")
+                print(">Exiting training")
 
-            print("Saving model")
+            print(">Saving model")
             exit_save(model)
-            print("Save complete")
+            print(">Save complete")
+            sleep(1) # wait to let run_trainer to read from PIPE
         except KeyboardInterrupt:
             break
         except:
             pass
-    os.kill(os.getppid(), signal.SIGKILL)
+    #os.kill(os.getppid(), signal.SIGKILL)
     
