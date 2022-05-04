@@ -110,7 +110,7 @@ def start_training(send_messages: multiprocessing.Queue):
                         FlipReward(),
                         useBoost()
                     ),
-                    (200.0, 1.0, 2.0, 2.0, 5.0)
+                    (20.0, 1.0, 2.0, 2.0, 5.0)
                 ),
                 team_only=True
             ),
@@ -152,7 +152,7 @@ def start_training(send_messages: multiprocessing.Queue):
                 pickupBoost(),
                 useBoost()
             ),
-            (1.0, 1.0, 3.0, 5.0, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 1.0, 1.0, 1.4, 3.0)),
+            (1.0, 1.0, 3.0, 5.0, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 1.0, 1.0, 1.6, 1.5)),
             self_play=self_play, #play against its self
             #time out after 50 seconds encourage kickoff
             terminal_conditions=[TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()],
@@ -177,9 +177,9 @@ def start_training(send_messages: multiprocessing.Queue):
                     #If you need to adjust parameters mid training, you can use the below example as a guide
                     custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None}
                 )
-                print(">Loaded previous exit save.")
+                print(">>Loaded previous exit save.")
             except:
-                print(">No saved model found, creating new model.")
+                print(">>No saved model found, creating new model.")
                 from torch.nn import Tanh
                 policy_kwargs = dict(
                     activation_fn=Tanh,
@@ -212,7 +212,7 @@ def start_training(send_messages: multiprocessing.Queue):
                 mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
                 while True:
                     new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
-                    print(">Training for %s timesteps" % new_training_interval)
+                    print(">>Training for %s timesteps" % new_training_interval)
                     send_messages.put(2)
                     #may need to reset timesteps when you're running a different number of instances than when you saved the model
                     model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
@@ -222,10 +222,10 @@ def start_training(send_messages: multiprocessing.Queue):
                         mmr_model_target_count += mmr_save_frequency
 
             except KeyboardInterrupt:
-                print(">Exiting training")
-            print(">Saving model")
+                print(">>Exiting training")
+            print(">>Saving model")
             exit_save(model)
-            print(">Save complete")
+            print(">>Save complete")
             break
         except KeyboardInterrupt:
             break
@@ -284,9 +284,10 @@ if __name__ == "__main__":
                 print(">Finished parsing trainer")
                 while trainer.is_alive():
                     sleep(1)
-                break
+                #trainer died restart loop
+                killRL()
             except KeyboardInterrupt:
-                #trainer.terminate()
+                #trainer will shut down and save, please wait
                 while trainer.is_alive():
                     sleep(1)
                 break
