@@ -22,7 +22,10 @@ def readLinesWait(wait_secs: int = -1, break_line: str = "NxUxLxL", break_string
             elif line != "":
                 lines.append(line)
                 if print_output:
-                    print(line)
+                    if line[0] == ">":
+                        print(">" + line)
+                    else:
+                        print(line)
             if line == break_line:
                 break
             foundStr = False
@@ -84,8 +87,8 @@ while True:
     if count == num_instances:
         print(">Waiting to start")
         #this will block and is pointless unless an error is actually thrown, if trainer just hangs this wont stop restart it until it crashes
-        lines.extend(readLinesWait(wait_time*2, break_strings=[">Training for"]))
-        while len(lines) > 0:
+        lines.extend(readLinesWait(wait_time*2, break_strings=[">Training for"], ignore_trainer=False))
+        while len(lines) > 0:   
             m = re.search('>Training for (.+?) timesteps', lines.pop(0))
             if m:
                 done = True
