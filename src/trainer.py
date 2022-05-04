@@ -1,5 +1,6 @@
-from time import sleep
-import sys
+from time import sleep, time
+import multiprocessing
+import os, signal
 import numpy as np
 from rlgym.envs import Match
 from stable_baselines3 import PPO
@@ -24,7 +25,15 @@ MAX_INSTANCES_NO_PAGING = 5
 WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 
-if __name__ == '__main__':  # Required for multiprocessing
+num_instances = 5
+paging = False
+if num_instances > MAX_INSTANCES_NO_PAGING:
+    paging = True
+wait_time=WAIT_TIME_NO_PAGING
+if paging:
+    wait_time=WAIT_TIME_PAGING
+def start_training(send_messages: multiprocessing.Queue):
+    global num_instances, paging, wait_time, model
     frame_skip = 12          # Number of ticks to repeat an action
     half_life_seconds = 5   # Easier to conceptualize, after this many seconds the reward discount is 0.5
 
@@ -36,30 +45,20 @@ if __name__ == '__main__':  # Required for multiprocessing
         agents_per_match = 2*team_size
     else:
         agents_per_match = team_size
-    try:
-        num_instances = int(sys.argv[1])
-    except:
-        num_instances = MAX_INSTANCES_NO_PAGING
-    paging = False
-    if num_instances > MAX_INSTANCES_NO_PAGING:
-        paging = True
-    wait_time=WAIT_TIME_NO_PAGING
-    if paging:
-        wait_time=WAIT_TIME_PAGING
-    print(">Wait time:        ", wait_time)
-    print("># of instances:   ", num_instances)
-    print(">Paging:           ", paging)
+    print(">>Wait time:        ", wait_time)
+    print(">># of instances:   ", num_instances)
+    print(">>Paging:           ", paging)
     n_env = agents_per_match * num_instances
-    print("># of env:         ", n_env)
+    print(">># of env:         ", n_env)
     batch_size = (100_000//(n_env))*(n_env) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
-    print(">Batch size:       ", batch_size)
+    print(">>Batch size:       ", batch_size)
     steps = (500_000//batch_size)*batch_size #making sure the experience counts line up properly
-    print(">Steps:            ", steps)
+    print(">>Steps:            ", steps)
     training_interval = 5_000_000
-    print(">Training interval:", training_interval)
+    print(">>Training interval:", training_interval)
     mmr_save_frequency = 25_000_000
-    print(">MMR frequency:    ", mmr_save_frequency)
-
+    print(">>MMR frequency:    ", mmr_save_frequency)
+    send_messages.put(1)
     attackRewards = CombinedReward(
         (
             VelocityPlayerToBallReward(),
@@ -98,8 +97,9 @@ if __name__ == '__main__':  # Required for multiprocessing
                         AlignBallGoal(0,1),
                         LiuDistancePlayerToBallReward(),
                         FlipReward(),
+                        useBoost()
                     ),
-                    (200.0, 1.0, 2.0, 2.0)
+                    (200.0, 1.0, 2.0, 2.0, 5.0)
                 ),
                 team_only=True
             ),
@@ -149,7 +149,6 @@ if __name__ == '__main__':  # Required for multiprocessing
             state_setter=DefaultState(),  # Resets to kickoff position
             action_parser=DiscreteAction()  # Discrete > Continuous don't @ me
         )
-
 
     while True:
         try:
@@ -203,6 +202,7 @@ if __name__ == '__main__':  # Required for multiprocessing
                 while True:
                     new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
                     print(">Training for %s timesteps" % new_training_interval)
+                    send_messages.put(2)
                     #may need to reset timesteps when you're running a different number of instances than when you saved the model
                     model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
                     exit_save(model)
@@ -212,14 +212,77 @@ if __name__ == '__main__':  # Required for multiprocessing
 
             except KeyboardInterrupt:
                 print(">Exiting training")
-
             print(">Saving model")
             exit_save(model)
             print(">Save complete")
-            sleep(1) # wait to let run_trainer to read from PIPE
+            break
         except KeyboardInterrupt:
             break
         except:
             pass
-    #os.kill(os.getppid(), signal.SIGKILL)
-    
+
+if __name__ == "__main__":
+    done = False
+    while not done:
+        initial_RLProc = len(getRLInstances())
+        print(">Initial instances:", initial_RLProc)
+        print(">Starting trainer")
+        receive_messages = multiprocessing.Queue()
+        trainer = multiprocessing.Process(target=start_training, args=[receive_messages])
+        trainer.start()
+        count = 0
+        offset = initial_RLProc
+        #Wait until setup is printed
+        while receive_messages.empty():
+            sleep(1)
+        receive_messages.get()
+        start = time()
+        while count < num_instances:
+            print(">Parsing instance:" , (count + 1))
+            curr_count = 0
+            while (time() - start) // wait_time <= count:
+                curr_count = len(getRLInstances())
+                if (curr_count < count + offset
+                        or curr_count > count + offset):
+                    break
+                sleep(1)
+            if curr_count > count:
+                count = curr_count - offset
+                print(">Instances found:" , count)
+                if count == num_instances:
+                    break
+            else:
+                break
+        done = False
+        if count == num_instances:
+            print(">Waiting to start")
+            start = time()
+            while (time() - start) < wait_time * 2:
+                if not receive_messages.empty():
+                    break
+            if not receive_messages.empty():
+                if receive_messages.get() == 2:
+                    done = True
+        if count != num_instances or not done:
+            print(">Killing trainer")
+            trainer.terminate()
+            PIDs = getRLInstances()
+            while len(PIDs) > 0:
+                pid = PIDs.pop()["pid"]
+                print(">Killing RL instance", pid)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except:
+                    print(">Failed")
+        else:
+            minimiseRL()
+            try:
+                print(">Finished parsing trainer")
+                while trainer.is_alive():
+                    sleep(1)
+                break
+            except KeyboardInterrupt:
+                #trainer.terminate()
+                while trainer.is_alive():
+                    sleep(1)
+                break
