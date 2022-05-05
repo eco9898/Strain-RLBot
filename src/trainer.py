@@ -26,9 +26,9 @@ WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 
 num_instances = 5
-kickoff_instances = num_instances // 2
+kickoff_instances = num_instances // 3
 match_instances = num_instances - kickoff_instances
-models = [["match", match_instances], ["kickoff", kickoff_instances]]
+models = [["kickoff", kickoff_instances], ["match", match_instances]]
 
 paging = False
 if num_instances > MAX_INSTANCES_NO_PAGING:
