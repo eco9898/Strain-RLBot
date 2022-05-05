@@ -25,13 +25,13 @@ MAX_INSTANCES_NO_PAGING = 5
 WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 
-num_instances = 5
-kickoff_instances = num_instances // 3
-match_instances = num_instances - kickoff_instances
+total_num_instances = 5
+kickoff_instances = total_num_instances // 3
+match_instances = total_num_instances - kickoff_instances
 models = [["kickoff", kickoff_instances], ["match", match_instances]]
 
 paging = False
-if num_instances > MAX_INSTANCES_NO_PAGING:
+if total_num_instances > MAX_INSTANCES_NO_PAGING:
     paging = True
 wait_time=WAIT_TIME_NO_PAGING
 if paging:
@@ -49,7 +49,7 @@ def killRL(targets: List = []):
                 print(">>Failed")
 
 def start_training(send_messages: multiprocessing.Queue, model_args: List):
-    global paging, wait_time
+    global paging, wait_time, total_num_instances
     name = model_args[0]
     num_instances = model_args[1]
     frame_skip = 12          # Number of ticks to repeat an action
@@ -68,7 +68,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     print(">>>Paging:           ", paging)
     n_env = agents_per_match * num_instances
     print(">>># of env:         ", n_env)
-    target_steps = 1_000_000
+    target_steps = int(1_000_000*(num_instances/total_num_instances))
     steps = target_steps//n_env #making sure the experience counts line up properly
     print(">>>Steps:            ", steps)
     batch_size = (100_000//(steps))*(steps) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
