@@ -37,17 +37,16 @@ wait_time=WAIT_TIME_NO_PAGING
 if paging:
     wait_time=WAIT_TIME_PAGING
 
-def killRL(whitelist: List = []):
+def killRL(targets: List = []):
     PIDs = getRLInstances()
     while len(PIDs) > 0:
         pid = PIDs.pop()
-        if pid in whitelist:
-            continue
-        print(">>Killing RL instance", pid["pid"])
-        try:
-            os.kill(pid["pid"], signal.SIGTERM)
-        except:
-            print(">>Failed")
+        if pid in targets:
+            print(">>Killing RL instance", pid["pid"])
+            try:
+                os.kill(pid["pid"], signal.SIGTERM)
+            except:
+                print(">>Failed")
 
 def start_training(send_messages: multiprocessing.Queue, model_args: List):
     global paging, wait_time
@@ -286,7 +285,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
 def trainingStarter(send_messages: multiprocessing.Queue, model_args):
     instances = model_args[1]
     done = False
-    whitelist = []
+    RLinstances = []
     while not done:
         initial_RLProc = len(getRLInstances())
         print(">>Initial instances:", initial_RLProc)
@@ -296,11 +295,11 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
         trainer.start()
         count = 0
         #Wait until setup is printed
-        while receive_messages.empty():
+        while receive_messages.empty() and trainer.is_alive():
             sleep(1)
         receive_messages.get()
         start = time()
-        while count < instances:
+        while count < instances  and trainer.is_alive():
             print(">>Parsing instance:" , (count + 1))
             curr_count = 0
             while (time() - start) // wait_time <= count:
@@ -311,7 +310,7 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
             if curr_count > count:
                 count = curr_count
                 print(">>Instances found:" , count)
-                whitelist.append(getRLInstances()[-1])
+                RLinstances.append(getRLInstances()[-1])
                 if count == instances:
                     break
             else:
@@ -320,16 +319,16 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
         if count == instances:
             print(">>Waiting to start")
             start = time()
-            while (time() - start) < wait_time * 2:
+            while (time() - start) < wait_time * 2 and trainer.is_alive():
                 if not receive_messages.empty():
                     break
-            if not receive_messages.empty():
+            if not receive_messages.empty() and trainer.is_alive():
                 if receive_messages.get() == 2:
                     done = True
         if count != instances or not done:
             print(">>Killing trainer")
             trainer.terminate()
-            killRL(whitelist)
+            killRL(RLinstances)
         else:
             minimiseRL()
             try:
@@ -338,13 +337,13 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
                 while trainer.is_alive():
                     sleep(1)
                 #trainer died restart loop
-                killRL(whitelist)
+                killRL(RLinstances)
             except KeyboardInterrupt:
                 #trainer will shut down and save, please wait
                 while trainer.is_alive():
                     sleep(0.1)
                 break
-    killRL(whitelist)
+    killRL(RLinstances)
 
 def start_starter(messages: List[multiprocessing.Queue], starters: List[multiprocessing.Process], model_args):
     done = False
@@ -355,7 +354,7 @@ def start_starter(messages: List[multiprocessing.Queue], starters: List[multipro
         starters[-1].start()
         #wait to open RL instances
         start = time()
-        while (time() - start) < wait_time * (model_args[1] + 2):
+        while (time() - start) < wait_time * (model_args[1] + 2) and starters[-1].is_alive():
             if not messages[-1].empty():
                 break
         if not messages[-1].empty():
