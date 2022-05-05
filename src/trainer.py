@@ -63,7 +63,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     print(">>>Steps:            ", steps)
     batch_size = (100_000//(steps))*(steps) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
     print(">>>Batch size:       ", batch_size)
-    training_interval = 25_000_000
+    training_interval = 25_000_000*(num_instances/total_num_instances)
     print(">>>Training interval:", training_interval)
     mmr_save_frequency = 50_000_000
     print(">>>MMR frequency:    ", mmr_save_frequency)
