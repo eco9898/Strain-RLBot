@@ -1,7 +1,6 @@
-logs*
 src/backup*
 src/logs*
-src/models/rl*
+src/models/*/rl*
 src/mmr_models*
 
 #auto-generated
