@@ -247,7 +247,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     # Save model every so often
     # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
     # This saves to specified folder with a specified name
-    callback = CheckpointCallback(round(1_000_000 / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
+    callback = CheckpointCallback(round(1_000_000*(num_instances/total_num_instances) / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
     #1mill per 8/9 minutes at 5 instances?
 
     try:
