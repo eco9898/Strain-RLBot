@@ -63,7 +63,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     print(">>>Steps:            ", steps)
     batch_size = (100_000//(steps))*(steps) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
     print(">>>Batch size:       ", batch_size)
-    training_interval = 25_000_000*(num_instances/total_num_instances)
+    training_interval = int(25_000_000*(num_instances/total_num_instances))
     print(">>>Training interval:", training_interval)
     mmr_save_frequency = 50_000_000
     print(">>>MMR frequency:    ", mmr_save_frequency)
@@ -290,11 +290,12 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
     while count < instances  and trainer.is_alive():
         print(">>Parsing instance:" + str(count + 1) + "+" + str(initial_RLPIDs))
         curr_count = 0
+        last_curr = 0
         while (time() - start) // INSTANCE_SETUP_TIME <= count:
             sleep(0.2)
             curr_PIDs = getRLInstances()
             curr_count = len(curr_PIDs) - initial_RLPIDs
-            if curr_count < count:
+            if curr_count < count or curr_count < last_curr:
                 #check if our instance or other instance closed
                 initial_RLPIDs = 0
                 curr_count = 0
@@ -305,6 +306,7 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
                         curr_count += 1
             if curr_count > count:
                 break
+            last_curr = curr_count
             sleep(0.2)
         if curr_count > count:
             count += 1
