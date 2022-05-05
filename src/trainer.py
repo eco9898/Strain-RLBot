@@ -25,7 +25,7 @@ WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 INSTANCE_SETUP_TIME = 45
 
-total_num_instances = 5
+total_num_instances = 4
 kickoff_instances = total_num_instances // 3
 match_instances = total_num_instances - kickoff_instances
 models = [["kickoff", kickoff_instances], ["match", match_instances]]
@@ -132,6 +132,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None}
             )
             print(">>>Loaded previous exit save.")
+            return model
         except:
             print(">>>No saved model found, creating new model.")
             from torch.nn import Tanh
@@ -368,13 +369,19 @@ if __name__ == "__main__":
         start_starter(messages, starters, model_args)
     print(">Finished starting trainers")
     try:
-        for trainer in starters:
-            while trainer.is_alive():
-                sleep(1)
-            #trainer died restart loop
+        while True:
+            for trainer in starters:
+                if trainer.is_alive():
+                    sleep(1)
+                else:
+                    print(">Trainer crashed")
+                    i = starters.index(trainer)
+                    starters.remove(trainer)
+                    messages.remove(messages[i])
+                    start_starter(messages, starters, models[i])
+                #trainer died restart loop
     except KeyboardInterrupt:
         for trainer in starters:
             #trainers will shut down and save, please wait
             while trainer.is_alive():
                 sleep(0.1)
-            break
