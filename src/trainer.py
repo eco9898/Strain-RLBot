@@ -133,8 +133,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     def exit_save(model, name: str):
         model.save("src/models/" + name + "/exit_save")
 
-    def load_save(name: str, env):
-        global steps, batch_size, MlpPolicy, gamma
+    def load_save(name: str, env, steps, batch_size, MlpPolicy, gamma):
         try:
             model = PPO.load(
                 "src/models/" + name + "/exit_save",
@@ -252,7 +251,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             env = VecMonitor(env)                                 # Recommended, logs mean reward and ep_len to Tensorboard
             env = VecNormalize(env, norm_obs=False, gamma=gamma)  # Highly recommended, normalizes rewards
 
-            model = load_save(model_args[0], env)
+            model = load_save(model_args[0], env, steps, batch_size, MlpPolicy, gamma)
 
             # Save model every so often
             # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
