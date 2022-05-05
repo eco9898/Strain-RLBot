@@ -253,7 +253,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             #may need to reset timesteps when you're running a different number of instances than when you saved the model
             #subprocess learning
             model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
-            exit_save(model)
+            exit_save(model, name)
             if model.num_timesteps >= mmr_model_target_count:
                 model.save(f"src/mmr_models/{model_args[0]}/{model.num_timesteps}")
                 mmr_model_target_count += mmr_save_frequency
@@ -261,7 +261,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     except KeyboardInterrupt:
         print(">>>Exiting training")
     print(">>>Saving model")
-    exit_save(model)
+    exit_save(model, name)
     print(">>>Save complete")
 
 def trainingStarter(send_messages: multiprocessing.Queue, model_args):
