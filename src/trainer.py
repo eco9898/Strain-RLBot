@@ -1,6 +1,5 @@
 from time import sleep, time
 import multiprocessing
-import os, signal
 import numpy as np
 from rlgym.envs import Match
 from stable_baselines3 import PPO
@@ -24,6 +23,7 @@ from trainer_classes import *
 MAX_INSTANCES_NO_PAGING = 5
 WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
+INSTANCE_SETUP_TIME = 45
 
 total_num_instances = 5
 kickoff_instances = total_num_instances // 3
@@ -36,17 +36,6 @@ if total_num_instances > MAX_INSTANCES_NO_PAGING:
 wait_time=WAIT_TIME_NO_PAGING
 if paging:
     wait_time=WAIT_TIME_PAGING
-
-def killRL(targets: List = []):
-    PIDs = getRLInstances()
-    while len(PIDs) > 0:
-        pid = PIDs.pop()
-        if pid in targets:
-            print(">>Killing RL instance", pid["pid"])
-            try:
-                os.kill(pid["pid"], signal.SIGTERM)
-            except:
-                print(">>Failed")
 
 def start_training(send_messages: multiprocessing.Queue, model_args: List):
     global paging, wait_time, total_num_instances
@@ -238,58 +227,50 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
         match._state_setter = DefaultState()  # Resets to kickoff position
         return match
     
+    if name == "kickoff":
+        match = get_kickoff
+    else:
+        match = get_match
+    env = SB3MultipleInstanceEnv(match, model_args[1], force_paging=paging, wait_time=wait_time) #or 40            # Start instances, waiting 60 seconds between each
+    env = VecCheckNan(env)                                # Optional
+    env = VecMonitor(env)                                 # Recommended, logs mean reward and ep_len to Tensorboard
+    env = VecNormalize(env, norm_obs=False, gamma=gamma)  # Highly recommended, normalizes rewards
 
-    while True:
-        try:
-            if name == "kickoff":
-                match = get_kickoff
-            else:
-                match = get_match
-            env = SB3MultipleInstanceEnv(match, model_args[1], force_paging=paging, wait_time=wait_time) #or 40            # Start instances, waiting 60 seconds between each
-            env = VecCheckNan(env)                                # Optional
-            env = VecMonitor(env)                                 # Recommended, logs mean reward and ep_len to Tensorboard
-            env = VecNormalize(env, norm_obs=False, gamma=gamma)  # Highly recommended, normalizes rewards
+    model = load_save(model_args[0], env, steps, batch_size, MlpPolicy, gamma)
 
-            model = load_save(model_args[0], env, steps, batch_size, MlpPolicy, gamma)
+    # Save model every so often
+    # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
+    # This saves to specified folder with a specified name
+    callback = CheckpointCallback(round(1_000_000 / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
+    #1mill per 8/9 minutes at 5 instances?
 
-            # Save model every so often
-            # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
-            # This saves to specified folder with a specified name
-            callback = CheckpointCallback(round(1_000_000 / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
-            #1mill per 8/9 minutes at 5 instances?
-
-            try:
-                mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
-                while True:
-                    new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
-                    print(">>>Training for %s timesteps" % new_training_interval)
-                    send_messages.put(2)
-                    #may need to reset timesteps when you're running a different number of instances than when you saved the model
-                    #subprocess learning
-                    model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
-                    exit_save(model)
-                    if model.num_timesteps >= mmr_model_target_count:
-                        model.save(f"src/mmr_models/{model_args[0]}/{model.num_timesteps}")
-                        mmr_model_target_count += mmr_save_frequency
-
-            except KeyboardInterrupt:
-                print(">>>Exiting training")
-            print(">>>Saving model")
+    try:
+        mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
+        while True:
+            new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
+            print(">>>Training for %s timesteps" % new_training_interval)
+            send_messages.put(2)
+            #may need to reset timesteps when you're running a different number of instances than when you saved the model
+            #subprocess learning
+            model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
             exit_save(model)
-            print(">>>Save complete")
-            break
-        except KeyboardInterrupt:
-            break
-        #except:
-        #    pass
+            if model.num_timesteps >= mmr_model_target_count:
+                model.save(f"src/mmr_models/{model_args[0]}/{model.num_timesteps}")
+                mmr_model_target_count += mmr_save_frequency
+
+    except KeyboardInterrupt:
+        print(">>>Exiting training")
+    print(">>>Saving model")
+    exit_save(model)
+    print(">>>Save complete")
 
 def trainingStarter(send_messages: multiprocessing.Queue, model_args):
+    global wait_time, paging
     instances = model_args[1]
     done = False
-    RLinstances = []
-    initial_RLProc = len(getRLInstances())
-    print(">>Initial instances:", initial_RLProc)
-    print(">>Starting trainer")
+    trainers_RLPIDs = []
+    initial_RLPIDs = len(getRLInstances())
+    print(">>Initial instances:", initial_RLPIDs)
     receive_messages = multiprocessing.Queue()
     trainer = multiprocessing.Process(target=start_training, args=[receive_messages, model_args])
     trainer.start()
@@ -299,39 +280,58 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
         sleep(1)
     receive_messages.get()
     start = time()
+    minimise = 0
     while count < instances  and trainer.is_alive():
-        print(">>Parsing instance:" , (count + 1))
+        print(">>Parsing instance:" + str(count + 1) + "+" + str(initial_RLPIDs))
         curr_count = 0
-        while (time() - start) // wait_time <= count:
-            curr_count = len(getRLInstances()) - initial_RLProc
-            if curr_count != count:
+        while (time() - start) // INSTANCE_SETUP_TIME <= count:
+            sleep(0.2)
+            curr_PIDs = getRLInstances()
+            curr_count = len(curr_PIDs) - initial_RLPIDs
+            if curr_count < count:
+                #check if our instance or other instance closed
+                initial_RLPIDs = 0
+                curr_count = 0
+                for pid in initial_RLPIDs:
+                    if pid in curr_PIDs:
+                        initial_RLPIDs += 1
+                    else:
+                        curr_count += 1
+            if curr_count > count:
                 break
-            sleep(1)
+            sleep(0.2)
         if curr_count > count:
-            count = curr_count
-            print(">>Instances found:" , count)
-            RLinstances.append(getRLInstances()[-1])
+            count += 1
+            print(">>Instances found:" + str(count) + "+" + str(initial_RLPIDs))
+            trainers_RLPIDs.append(getRLInstances()[-1])
             if count == instances:
                 break
         else:
             break
+        #minimise done windows
+        #if (time() - start) // INSTANCE_SETUP_TIME > minimise:
+        #    minimiseRL([trainers_RLPIDs[minimise]])
+        #    minimise = (time() - start) // INSTANCE_SETUP_TIME
     done = False
     if count == instances:
         print(">>Waiting to start")
         start = time()
-        while (time() - start) < wait_time * 2 and trainer.is_alive():
+        while (time() - start) < INSTANCE_SETUP_TIME * 2 and trainer.is_alive():
             if not receive_messages.empty():
                 break
+            sleep(0.1)
         if not receive_messages.empty() and trainer.is_alive():
             if receive_messages.get() == 2:
                 done = True
     if count != instances or not done:
-        print(">>Killing trainer")
+        print(">>Killing trainer: " + model_args[0])
         trainer.terminate()
+        while trainer.is_alive():
+            sleep(1)
     else:
-        minimiseRL()
+        minimiseRL(trainers_RLPIDs)
         try:
-            print(">>Finished parsing trainer")
+            print(">>Finished parsing trainer: " + model_args[0])
             send_messages.put(1)
             while trainer.is_alive():
                 sleep(1)
@@ -340,7 +340,7 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
             #trainer will shut down and save, please wait
             while trainer.is_alive():
                 sleep(0.1)
-    killRL(RLinstances)
+    killRL(trainers_RLPIDs)
 
 def start_starter(messages: List[multiprocessing.Queue], starters: List[multiprocessing.Process], model_args):
     done = False
@@ -351,7 +351,7 @@ def start_starter(messages: List[multiprocessing.Queue], starters: List[multipro
         starters[-1].start()
         #wait to open RL instances
         start = time()
-        while (time() - start) < wait_time * (model_args[1] + 2) and starters[-1].is_alive():
+        while (time() - start) < INSTANCE_SETUP_TIME * 1.2 * (model_args[1] + 2) and starters[-1].is_alive():
             if not messages[-1].empty():
                 break
         if not messages[-1].empty():

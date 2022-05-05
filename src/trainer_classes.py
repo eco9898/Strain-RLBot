@@ -1,6 +1,6 @@
 import numpy as np
 import psutil
-import win32gui, win32con
+import win32gui, win32con, win32process, os, signal
 from rlgym.utils.common_values import ORANGE_TEAM, BLUE_TEAM, ORANGE_GOAL_BACK, BLUE_GOAL_BACK, ORANGE_GOAL_CENTER, BLUE_GOAL_CENTER, BACK_WALL_Y, CAR_MAX_SPEED, BALL_MAX_SPEED
 from rlgym.utils.reward_functions.common_rewards.conditional_rewards import ConditionalRewardFunction
 from rlgym.utils import RewardFunction, math
@@ -13,17 +13,17 @@ def getRLInstances():
     '''
     #minimisedPIDs = []
     #while len(minimisedPIDs < instanceCount):
-    listOfProcessObjects = []
+    listOfPIDs = []
     #Iterate over the all the running process
     for proc in psutil.process_iter():
         try:
             pinfo = proc.as_dict(attrs=['pid', 'name'])
             # Check if process name contains the given name string.
             if "RocketLeague.exe".lower() == pinfo['name'].lower() :
-                listOfProcessObjects.append(pinfo)
+                listOfPIDs.append(pinfo["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied , psutil.ZombieProcess):
             pass
-    return listOfProcessObjects
+    return listOfPIDs
         #for proc in listOfProcessObjects:
         #    if not proc in minimisedPIDs:
         #        win32gui.FindWindow("RocketLeague.exe", None)
@@ -32,17 +32,30 @@ toplist = []
 winlist = []
 def enum_callback(hwnd, results):
     winlist.append((hwnd, win32gui.GetWindowText(hwnd)))
-def minimiseRL():
+
+def minimiseRL(targets: List = []):
     toplist.clear()
     winlist.clear()
-
     win32gui.EnumWindows(enum_callback, toplist)
     Rl = [(hwnd, title) for hwnd, title in winlist if 'Rocket League (64-bit, DX11, Cooked)'.lower() in title.lower()]
     # just grab the first window that matches
     for win in Rl:
         # use the window handle to set focus
         #win32gui.SetForegroundWindow(win[0])
-        win32gui.ShowWindow(win[0], win32con.SW_MINIMIZE)
+        if win32process.GetWindowThreadProcessId(win[0])[1] in targets:
+            win32gui.ShowWindow(win[0], win32con.SW_MINIMIZE)
+
+def killRL(targets: List = []):
+    PIDs = getRLInstances()
+    while len(PIDs) > 0:
+        pid = PIDs.pop()
+        if pid in targets:
+            print(">>Killing RL instance", pid)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except:
+                print(">>Failed")
+
 class TeamSpacingReward(RewardFunction):
     def __init__(self, min_spacing: float = 1000) -> None:
         super().__init__()
