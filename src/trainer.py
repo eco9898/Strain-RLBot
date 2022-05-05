@@ -282,67 +282,64 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             break
         #except:
         #    pass
+
 def trainingStarter(send_messages: multiprocessing.Queue, model_args):
     instances = model_args[1]
     done = False
     RLinstances = []
-    while not done:
-        initial_RLProc = len(getRLInstances())
-        print(">>Initial instances:", initial_RLProc)
-        print(">>Starting trainer")
-        receive_messages = multiprocessing.Queue()
-        trainer = multiprocessing.Process(target=start_training, args=[receive_messages, model_args])
-        trainer.start()
-        count = 0
-        #Wait until setup is printed
-        while receive_messages.empty() and trainer.is_alive():
+    initial_RLProc = len(getRLInstances())
+    print(">>Initial instances:", initial_RLProc)
+    print(">>Starting trainer")
+    receive_messages = multiprocessing.Queue()
+    trainer = multiprocessing.Process(target=start_training, args=[receive_messages, model_args])
+    trainer.start()
+    count = 0
+    #Wait until setup is printed
+    while receive_messages.empty() and trainer.is_alive():
+        sleep(1)
+    receive_messages.get()
+    start = time()
+    while count < instances  and trainer.is_alive():
+        print(">>Parsing instance:" , (count + 1))
+        curr_count = 0
+        while (time() - start) // wait_time <= count:
+            curr_count = len(getRLInstances()) - initial_RLProc
+            if curr_count != count:
+                break
             sleep(1)
-        receive_messages.get()
-        start = time()
-        while count < instances  and trainer.is_alive():
-            print(">>Parsing instance:" , (count + 1))
-            curr_count = 0
-            while (time() - start) // wait_time <= count:
-                curr_count = len(getRLInstances()) - initial_RLProc
-                if curr_count != count:
-                    break
-                sleep(1)
-            if curr_count > count:
-                count = curr_count
-                print(">>Instances found:" , count)
-                RLinstances.append(getRLInstances()[-1])
-                if count == instances:
-                    break
-            else:
+        if curr_count > count:
+            count = curr_count
+            print(">>Instances found:" , count)
+            RLinstances.append(getRLInstances()[-1])
+            if count == instances:
                 break
-        done = False
-        if count == instances:
-            print(">>Waiting to start")
-            start = time()
-            while (time() - start) < wait_time * 2 and trainer.is_alive():
-                if not receive_messages.empty():
-                    break
-            if not receive_messages.empty() and trainer.is_alive():
-                if receive_messages.get() == 2:
-                    done = True
-        if count != instances or not done:
-            print(">>Killing trainer")
-            trainer.terminate()
-            killRL(RLinstances)
         else:
-            minimiseRL()
-            try:
-                print(">>Finished parsing trainer")
-                send_messages.put(1)
-                while trainer.is_alive():
-                    sleep(1)
-                #trainer died restart loop
-                killRL(RLinstances)
-            except KeyboardInterrupt:
-                #trainer will shut down and save, please wait
-                while trainer.is_alive():
-                    sleep(0.1)
+            break
+    done = False
+    if count == instances:
+        print(">>Waiting to start")
+        start = time()
+        while (time() - start) < wait_time * 2 and trainer.is_alive():
+            if not receive_messages.empty():
                 break
+        if not receive_messages.empty() and trainer.is_alive():
+            if receive_messages.get() == 2:
+                done = True
+    if count != instances or not done:
+        print(">>Killing trainer")
+        trainer.terminate()
+    else:
+        minimiseRL()
+        try:
+            print(">>Finished parsing trainer")
+            send_messages.put(1)
+            while trainer.is_alive():
+                sleep(1)
+            #trainer died restart loop
+        except KeyboardInterrupt:
+            #trainer will shut down and save, please wait
+            while trainer.is_alive():
+                sleep(0.1)
     killRL(RLinstances)
 
 def start_starter(messages: List[multiprocessing.Queue], starters: List[multiprocessing.Process], model_args):
