@@ -296,7 +296,6 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
         trainer = multiprocessing.Process(target=start_training, args=[receive_messages, model_args])
         trainer.start()
         count = 0
-        offset = initial_RLProc
         #Wait until setup is printed
         while receive_messages.empty():
             sleep(1)
@@ -306,13 +305,12 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
             print(">>Parsing instance:" , (count + 1))
             curr_count = 0
             while (time() - start) // wait_time <= count:
-                curr_count = len(getRLInstances())
-                if (curr_count < count + offset
-                        or curr_count > count + offset):
+                curr_count = len(getRLInstances()) - initial_RLProc
+                if curr_count != count:
                     break
                 sleep(1)
             if curr_count > count:
-                count = curr_count - offset
+                count = curr_count
                 print(">>Instances found:" , count)
                 whitelist.append(getRLInstances()[-1])
                 if count == instances:
