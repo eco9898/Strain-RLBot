@@ -17,7 +17,7 @@ class Agent:
         }
         if use_latest:
             folder_path = str(_path) + '\\models'
-            file_type = r'\*zip'
+            file_type = r'\*kickoff.zip'
             files = glob.glob(folder_path + file_type)
             newest_model = max(files, key=os.path.getctime)[0:-4]
 
