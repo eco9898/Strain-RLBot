@@ -2,6 +2,7 @@ logs*
 src/backup*
 src/logs*
 src/models/rl*
+src/mmr_models/50999490.zip
 
 #auto-generated
 # Byte-compiled / optimized / DLL files

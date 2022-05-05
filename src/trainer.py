@@ -153,7 +153,7 @@ def start_training(send_messages: multiprocessing.Queue):
                 pickupBoost(),
                 useBoost()
             ),
-            (1.0, 1.0, 3.0, 5.0, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 1.0, 1.0, 1.6, 1.5)),
+            (1.0, 1.0, 3.0, 5.0, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 1.0, 1.6, np.sqrt(30))),
             self_play=self_play, #play against its self
             #time out after 50 seconds encourage kickoff
             terminal_conditions=[TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()],

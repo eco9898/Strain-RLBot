@@ -34,3 +34,6 @@ class Agent:
 
 if __name__ == "__main__":
     print("You're doing it wrong.")
+
+#switch out different models for kickoff
+# Ive considered setting up different models with different roles, but thought it would be too difficult because of the kickoff, but if I had it set to load them in after kickoff if they dont have possession that might work
