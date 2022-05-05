@@ -1,3 +1,4 @@
+import glob
 from time import sleep, time
 import multiprocessing
 import numpy as np
@@ -123,8 +124,12 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
 
     def load_save(name: str, env, steps, batch_size, MlpPolicy, gamma):
         try:
+            folder_path = 'src\\models\\' + name
+            file_type = r'\*.zip'
+            files = glob.glob(folder_path + file_type)
+            newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
             model = PPO.load(
-                "src/models/" + name + "/exit_save",
+                newest_kickoff_model,
                 env,
                 device="auto",
                 #custom_objects={"n_envs": env.num_envs}, #automatically adjusts to users changing instance count, may encounter shaping error otherwise
