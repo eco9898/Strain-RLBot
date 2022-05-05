@@ -3,6 +3,7 @@ import pathlib
 from discrete_act import DiscreteAction
 import glob
 import os.path
+from trainer_classes import isKickoff
 
 use_latest = True
 
@@ -16,19 +17,29 @@ class Agent:
             "n_envs": 1,
         }
         if use_latest:
-            folder_path = str(_path) + '\\models'
-            file_type = r'\*kickoff.zip'
+            folder_path = str(_path) + '\\models\\kickoff'
+            file_type = r'\*.zip'
             files = glob.glob(folder_path + file_type)
-            newest_model = max(files, key=os.path.getctime)[0:-4]
+            newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
 
-            self.actor = PPO.load(newest_model, device='auto', custom_objects=custom_objects)
+            self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
+            folder_path = str(_path) + '\\models\\match'
+            file_type = r'\*.zip'
+            files = glob.glob(folder_path + file_type)
+            newest_match_model = max(files, key=os.path.getctime)[0:-4]
+
+            self.matchActor = PPO.load(newest_match_model, device='auto', custom_objects=custom_objects)
         else:
-            self.actor = PPO.load(str(_path) + '/models/exit_save', device='auto', custom_objects=custom_objects)
+            self.kickoffActor = PPO.load(str(_path) + '/models/kickoff/exit_save', device='auto', custom_objects=custom_objects)
+            self.matchActor = PPO.load(str(_path) + '/models/match/exit_save', device='auto', custom_objects=custom_objects)
         self.parser = DiscreteAction()
 
 
     def act(self, obs, state):
-        action = self.actor.predict(obs, state, deterministic=True)
+        if isKickoff():
+            action = self.kickoffActor.predict(obs, state, deterministic=True)
+        else:
+            action = self.matchActor.predict(obs, state, deterministic=True)
         x = self.parser.parse_actions(action[0], state)
         return x[0]
 

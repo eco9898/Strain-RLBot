@@ -204,7 +204,7 @@ def ballApproachingGoal(state: GameState, team: int):
         vel /= BALL_MAX_SPEED
         return float(np.dot(norm_pos_diff, vel))"""
 
-def attacking(player: PlayerData, state: GameState):
+def isAttacking(player: PlayerData, state: GameState):
     if player.is_demoed:
         return False
     return playerCrossedHalfWay(player) and (playerApproachingGoal(player) or ballApproachingGoal(state, player.team_num)
@@ -213,7 +213,7 @@ def attacking(player: PlayerData, state: GameState):
 
 class RewardIfAttacking(ConditionalRewardFunction):
     def condition(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> bool:
-        return attacking(player, state)
+        return isAttacking(player, state)
 
 def defending(player: PlayerData, state: GameState):
     if player.is_demoed:
@@ -234,13 +234,16 @@ class RewardIfLastMan(ConditionalRewardFunction):
         for p in state.players:
             if p.team_num == player.team_num and p.car_id != player.car_id and not p.is_demoed:
                 teammates += 1
-                if attacking(p, state):
+                if isAttacking(p, state):
                     teammatesAttacking += 1
         return teammatesAttacking == teammates - 1
 
+def isKickoff(player: PlayerData, state: GameState) -> bool:
+    return state.ball.position[0] == 0 and state.ball.position[1] == 0 and np.linalg.norm(player.car_data.linear_velocity) == 0
+
 class RewardIfKickoff(ConditionalRewardFunction):
     def condition(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> bool:
-        return state.ball.position[0] == 0 and state.ball.position[1] == 0 and np.linalg.norm(player.car_data.linear_velocity) == 0
+        return isKickoff(player, state)
 
 class RewardIfFurthestFromBall(ConditionalRewardFunction):
     def __init__(self, reward_func: RewardFunction, team_only=True):
