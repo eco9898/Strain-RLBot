@@ -45,10 +45,15 @@ def minimiseRL(targets: List = []):
         if win32process.GetWindowThreadProcessId(win[0])[1] in targets:
             win32gui.ShowWindow(win[0], win32con.SW_MINIMIZE)
 
-def killRL(targets: List = []):
+def killRL(targets: List = [], blacklist: List = []):
     PIDs = getRLInstances()
     while len(PIDs) > 0:
         pid = PIDs.pop()
+        if len(blacklist) > 0:
+            if pid in blacklist:
+                continue
+        else:
+            targets.append(pid)
         if pid in targets:
             print(">>Killing RL instance", pid)
             try:
