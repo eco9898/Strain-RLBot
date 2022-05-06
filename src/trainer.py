@@ -1,11 +1,12 @@
 import glob
 from time import sleep, time
+from  datetime import datetime
 import multiprocessing
 from typing import Dict
 import numpy as np
 from rlgym.envs import Match
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from stable_baselines3.common.vec_env import VecMonitor, VecNormalize, VecCheckNan
 from stable_baselines3.ppo import MlpPolicy
 
@@ -17,6 +18,7 @@ from rlgym.utils.reward_functions.common_rewards.player_ball_rewards import *
 from rlgym.utils.reward_functions.common_rewards.ball_goal_rewards import *
 from rlgym.utils.reward_functions.common_rewards.conditional_rewards import *
 from rlgym.utils.reward_functions import CombinedReward
+from rlgym_tools.sb3_utils.sb3_log_reward import *
 
 from advanced_padder import AdvancedObsPadder
 from discrete_act import DiscreteAction
@@ -27,7 +29,7 @@ WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 INSTANCE_SETUP_TIME = 45
 
-total_num_instances = 10
+total_num_instances = 1
 kickoff_instances = total_num_instances // 3
 match_instances = total_num_instances - kickoff_instances
 models: List = [["kickoff", kickoff_instances], ["match", match_instances]]
@@ -47,6 +49,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     num_instances = model_args[1]
     frame_skip = 12          # Number of ticks to repeat an action
     half_life_seconds = 5   # Easier to conceptualize, after this many seconds the reward discount is 0.5
+
+    reward_log_file = "src/logs/" + name + "/reward_" + str(datetime.now().hour) + "-" + str(datetime.now().hour)
 
     fps = 120/frame_skip #120 / frame_skip
     gamma = np.exp(np.log(0.5) / (fps * half_life_seconds))  # Quick mafs
@@ -179,7 +183,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
 
     def get_match():  # Need to use a function so that each instance can call it and produce their own objects
         match: Match = get_base_match()
-        match._reward_fn = CombinedReward(
+        match._reward_fn = SB3CombinedLogReward(
             (
                 RewardIfAttacking(attackRewards),
                 RewardIfDefending(defendRewards),
@@ -202,14 +206,15 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 pickupBoost(),
                 useBoost()
             ),
-            (1.0, 1.0, 3.0, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 1.0, 1.6, np.sqrt(30)))
+            (1.0, 0.2, 0.5, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 0.2, 1.6, 10.0),
+            reward_log_file)
         match._terminal_conditions = [TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()]
         match._state_setter = RandomState()  # Resets to random
         return match
 
     def get_kickoff():  # Need to use a function so that each instance can call it and produce their own objects
         match: Match = get_base_match()
-        match._reward_fn = CombinedReward(
+        match._reward_fn = SB3CombinedLogReward(
             (
                 kickoffRewards,
                 VelocityReward(),
@@ -230,7 +235,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 pickupBoost(),
                 useBoost(),
             ),
-            (5.0, 10.0, 3.0, 1.0, 1.5, 1.0, 5.0, 0.6, 1.0, 1.6, np.sqrt(30)))
+            (5.0, 10.0, 3.0, 1.0, 1.5, 1.0, 5.0, 0.6, 1.0, 1.6, np.sqrt(30)),
+            reward_log_file)
         #time out after 50 seconds encourage kickoff
         match._terminal_conditions = [TimeoutCondition(fps * 50), NoTouchTimeoutCondition(fps * 20), GoalScoredCondition()]
         match._state_setter = DefaultState()  # Resets to kickoff position
@@ -250,7 +256,16 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     # Save model every so often
     # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
     # This saves to specified folder with a specified name
-    callback = CheckpointCallback(round(1_000_000*(num_instances/total_num_instances) / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
+    checkpoint_callback = CheckpointCallback(round(1_000_000*(num_instances/total_num_instances) / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
+    
+    if name == "kickoff":
+        reward_names = ["kickoff", "vel", 'faceball', "event", "jumptouch", "touch", "spacing", "flip", "saveboost", "pickupboost", "useboost"]
+    else:
+        reward_names = ["att", "def", "lastman", "vel", 'faceball', "event", "jumptouch", "touch", "spacing", "flip", "saveboost", "pickupboost", "useboost"]
+
+    reward_graph_callback = SB3CombinedLogRewardCallback(
+        reward_names,
+        reward_log_file)
     #1mill per 8/9 minutes at 5 instances?
 
     mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
@@ -261,7 +276,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             send_messages.put(2)
             #may need to reset timesteps when you're running a different number of instances than when you saved the model
             #subprocess learning
-            model.learn(new_training_interval, callback=callback, reset_num_timesteps=False) #can ignore callback if training_interval < callback target
+            model.learn(new_training_interval, callback=CallbackList([checkpoint_callback, reward_graph_callback]), reset_num_timesteps=False) #can ignore callback if training_interval < callback target
             exit_save(model, name)
             if model.num_timesteps >= mmr_model_target_count:
                 model.save(f"src/mmr_models/{model_args[0]}/{model.num_timesteps}")
