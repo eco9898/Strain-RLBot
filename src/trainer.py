@@ -1,6 +1,7 @@
 import glob
 from time import sleep, time
 import multiprocessing
+from typing import Dict
 import numpy as np
 from rlgym.envs import Match
 from stable_baselines3 import PPO
@@ -26,10 +27,12 @@ WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 INSTANCE_SETUP_TIME = 45
 
-total_num_instances = 4
+total_num_instances = 5
 kickoff_instances = total_num_instances // 3
 match_instances = total_num_instances - kickoff_instances
-models = [["kickoff", kickoff_instances], ["match", match_instances]]
+models: List = [["kickoff", kickoff_instances], ["match", match_instances]]
+#models: List = [["match", total_num_instances]]
+models: List = [["kickoff", total_num_instances]]
 
 paging = False
 if total_num_instances > MAX_INSTANCES_NO_PAGING:
@@ -58,12 +61,12 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     print(">>>Paging:           ", paging)
     n_env = agents_per_match * num_instances
     print(">>># of env:         ", n_env)
-    target_steps = int(1_000_000*(num_instances/total_num_instances))
+    target_steps = int(1_000_000)#*(num_instances/total_num_instances))
     steps = target_steps//n_env #making sure the experience counts line up properly
     print(">>>Steps:            ", steps)
     batch_size = (100_000//(steps))*(steps) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
     print(">>>Batch size:       ", batch_size)
-    training_interval = int(25_000_000*(num_instances/total_num_instances))
+    training_interval = int(25_000_000)#*(num_instances/total_num_instances))
     print(">>>Training interval:", training_interval)
     mmr_save_frequency = 50_000_000
     print(">>>MMR frequency:    ", mmr_save_frequency)
@@ -270,7 +273,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     exit_save(model, name)
     print(">>>Save complete")
 
-def trainingStarter(send_messages: multiprocessing.Queue, model_args):
+def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
     global wait_time, paging
     instances = model_args[1]
     done = False
@@ -338,9 +341,10 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
             sleep(1)
     else:
         minimiseRL(trainers_RLPIDs)
+        print(">>Finished parsing trainer: " + model_args[0])
+        send_messages.put(1)
+        send_messages.put(trainers_RLPIDs)
         try:
-            print(">>Finished parsing trainer: " + model_args[0])
-            send_messages.put(1)
             while trainer.is_alive():
                 sleep(1)
             #trainer died restart loop
@@ -350,45 +354,62 @@ def trainingStarter(send_messages: multiprocessing.Queue, model_args):
                 sleep(0.1)
     killRL(trainers_RLPIDs)
 
-def start_starter(messages: List[multiprocessing.Queue], starters: List[multiprocessing.Process], model_args):
-    done = False
+def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str, multiprocessing.Process], model_args):
+    name = model_args[0]
+    instances = model_args[1]
     print(">Starting trainer: " + model_args[0])
-    while not done:
-        messages.append(multiprocessing.Queue())
-        starters.append(multiprocessing.Process(target=trainingStarter, args=[messages[-1], model_args]))
-        starters[-1].start()
+    while True:
+        messages[name] = multiprocessing.Queue()
+        monitors[name] = multiprocessing.Process(target=trainingMonitor, args=[messages[name], model_args])
+        monitors[name].start()
         #wait to open RL instances
         start = time()
-        while (time() - start) < INSTANCE_SETUP_TIME * 1.2 * (model_args[1] + 2) and starters[-1].is_alive():
-            if not messages[-1].empty():
+        while (time() - start) < INSTANCE_SETUP_TIME * 1.2 * (instances + 2) and monitors[name].is_alive():
+            if not messages[name].empty():
                 break
-        if not messages[-1].empty():
-            if messages[-1].get() == 1:
-                done = True
-        if not done:
-            print(">Restarting trainer: " + model_args[0])
-    print(">Training started: " + model_args[0])
+        if not messages[name].empty():
+            if messages[name].get() == 1:
+                print(">Training started: " + name)
+                return messages[name].get()
+        print(">Restarting trainer: " + name)
 
 if __name__ == "__main__":
-    messages: List[multiprocessing.Queue] = []
-    starters: List[multiprocessing.Process] = []
+    messages: Dict[str, multiprocessing.Queue] = {}
+    monitors: Dict[str, multiprocessing.Process] = {}
+    model_instances: Dict[str, List[int]]  = {}
+    models_used: Dict[str, List]  = {}
+    all_instances = []
+    initial_instances = getRLInstances()
     for model_args in models:
-        start_starter(messages, starters, model_args)
+        model_instances[model_args[0]] = start_starter(messages, monitors, model_args)
+        all_instances.extend(model_instances[model_args[0]])
+        models_used[model_args[0]] = model_args
     print(">Finished starting trainers")
     try:
         while True:
-            for trainer in starters:
-                if trainer.is_alive():
+            for key in monitors:
+                monitor = monitors[key]
+                if monitor.is_alive():
                     sleep(1)
                 else:
                     print(">Trainer crashed")
-                    i = starters.index(trainer)
-                    starters.remove(trainer)
-                    messages.remove(messages[i])
-                    start_starter(messages, starters, models[i])
+                    #Kill instances that weren't present before and weren't reported by trainer
+                    blacklist = initial_instances.copy()
+                    blacklist.append(all_instances)
+                    killRL(blacklist=initial_instances)
+                    model_args = models_used[key]
+                    #kill trainer's instances
+                    killRL(model_instances[key])
+                    #add logic to detect not all were killed and to search for extra instances, if they match kill them
+                    # if an instance crashes RLgym restarts it
+                    model_instances[key] = start_starter(messages, monitors, model_args)
                 #trainer died restart loop
     except KeyboardInterrupt:
-        for trainer in starters:
+        for monitor in monitors:
             #trainers will shut down and save, please wait
-            while trainer.is_alive():
+            while monitor.is_alive():
                 sleep(0.1)
+            #kill instances reported
+            #killRL(all_instances)
+            #Kill instances that weren't present before
+            killRL(blacklist=initial_instances)
