@@ -6,6 +6,7 @@ import os.path
 from trainer_classes import isKickoff
 
 use_latest = True
+use_kickoff = False
 
 class Agent:
     def __init__(self):
@@ -17,10 +18,14 @@ class Agent:
             "n_envs": 1,
         }
         if use_latest:
-            folder_path = str(_path) + '\\models\\kickoff'
-            file_type = r'\*.zip'
-            files = glob.glob(folder_path + file_type)
-            newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
+            if use_kickoff:
+                try:
+                    folder_path = str(_path) + '\\models\\kickoff'
+                    file_type = r'\*.zip'
+                    files = glob.glob(folder_path + file_type)
+                    newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
+                except:
+                    use_kickoff = False
 
             self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
             folder_path = str(_path) + '\\models\\match'
@@ -36,7 +41,7 @@ class Agent:
 
 
     def act(self, obs, state):
-        if isKickoff():
+        if isKickoff() and use_kickoff:
             action = self.kickoffActor.predict(obs, state, deterministic=True)
         else:
             action = self.matchActor.predict(obs, state, deterministic=True)
