@@ -29,7 +29,7 @@ WAIT_TIME_NO_PAGING = 22
 WAIT_TIME_PAGING = 40
 INSTANCE_SETUP_TIME = 45
 
-total_num_instances = 1
+total_num_instances = 10
 kickoff_instances = total_num_instances // 3
 match_instances = total_num_instances - kickoff_instances
 models: List = [["kickoff", kickoff_instances], ["match", match_instances]]
@@ -50,7 +50,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     frame_skip = 12          # Number of ticks to repeat an action
     half_life_seconds = 5   # Easier to conceptualize, after this many seconds the reward discount is 0.5
 
-    reward_log_file = "src/logs/" + name + "/reward_" + str(datetime.now().hour) + "-" + str(datetime.now().hour)
+    reward_log_file = "src/logs/" + name + "/reward_" + str(datetime.now().hour) + "-" + str(datetime.now().minute)
 
     fps = 120/frame_skip #120 / frame_skip
     gamma = np.exp(np.log(0.5) / (fps * half_life_seconds))  # Quick mafs
@@ -75,7 +75,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     mmr_save_frequency = 50_000_000
     print(">>>MMR frequency:    ", mmr_save_frequency)
     send_messages.put(1)
-    attackRewards = CombinedReward(
+    attackRewards = SB3CombinedLogReward(
         (
             VelocityPlayerToBallReward(),
             LiuDistancePlayerToBallReward(),
@@ -83,9 +83,10 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             RewardIfTouchedLast(VelocityBallToGoalReward()),
             RewardIfClosestToBall(AlignBallGoal(0,1), True),
         ),
-        (2.0, 0.2, 1.0, 1.0, 0.8))
+        (2.0, 0.2, 1.0, 1.0, 0.8),
+        reward_log_file + "_attack")
 
-    defendRewards = CombinedReward(
+    defendRewards = SB3CombinedLogReward(
         (
             VelocityPlayerToBallReward(),
             LiuDistancePlayerToBallReward(),
@@ -93,18 +94,20 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             RewardIfTouchedLast(VelocityBallToGoalReward()),
             AlignBallGoal(1,0)
         ),
-        (1.0, 0.2, 1.0, 1.0, 1.5))
+        (1.0, 0.2, 1.0, 1.0, 1.5),
+        reward_log_file + "_defend")
 
-    lastManRewards = CombinedReward(
+    lastManRewards = SB3CombinedLogReward(
         (
             RewardIfTouchedLast(VelocityBallToGoalReward()),
             AlignBallGoal(1,0),
             LiuDistancePlayerToGoalReward(),
             ConstantReward()
         ),
-        (2.0, 1.0, 0.6, 0.2))
+        (2.0, 1.0, 0.6, 0.2),
+        reward_log_file + "_last_man")
 
-    kickoffRewards = CombinedReward(
+    kickoffRewards = SB3CombinedLogReward(
         (
             RewardIfClosestToBall(
                 CombinedReward(
@@ -124,7 +127,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             TeamSpacingReward(),
             pickupBoost()
         ),
-        (2.0, 1.0, 1.5, 1.0, 0.4))
+        (2.0, 1.0, 1.5, 1.0, 0.4),
+        reward_log_file + "_kickoff")
 
     def exit_save(model, name: str):
         model.save("src/models/" + name + "/exit_save")
@@ -192,8 +196,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 FaceBallReward(),
                 EventReward(
                     team_goal=100.0,
-                    goal=20.0,
-                    concede=-120.0,
+                    goal=10.0 * team_size,
+                    concede=-100.0 + (10.0 * team_size),
                     shot=10.0,
                     save=30.0,
                     demo=12.0,
@@ -206,7 +210,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 pickupBoost(),
                 useBoost()
             ),
-            (1.0, 0.2, 0.5, 10.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 0.2, 1.6, 10.0),
+            #(1.0, 0.2, 0.5, 1.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 0.2, 1.6, 10.0),
+            (0.17, 0.20, 0.15, 0.24, 0.14, 3.92, 54.70, 6.07, 0.37, 0.19, 0.12, 0.60, 37.27),
             reward_log_file)
         match._terminal_conditions = [TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()]
         match._state_setter = RandomState()  # Resets to random
@@ -221,8 +226,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 FaceBallReward(),
                 EventReward(
                     team_goal=100.0,
-                    goal=20.0,
-                    concede=-120.0,
+                    goal=10.0 * team_size,
+                    concede=-100.0 + (10.0 * team_size),
                     shot=10.0,
                     save=30.0,
                     demo=12.0,
@@ -266,6 +271,18 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     reward_graph_callback = SB3CombinedLogRewardCallback(
         reward_names,
         reward_log_file)
+    reward_graph_callback_attacks = SB3CombinedLogRewardCallback(
+        reward_names,
+        reward_log_file + "_attack")
+    reward_graph_callback_defend = SB3CombinedLogRewardCallback(
+        reward_names,
+        reward_log_file + "_defend")
+    reward_graph_callback_last_man = SB3CombinedLogRewardCallback(
+        reward_names,
+        reward_log_file + "_last_man")
+    reward_graph_callback_kickoff = SB3CombinedLogRewardCallback(
+        reward_names,
+        reward_log_file + "_kickoff")
     #1mill per 8/9 minutes at 5 instances?
 
     mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
@@ -276,7 +293,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             send_messages.put(2)
             #may need to reset timesteps when you're running a different number of instances than when you saved the model
             #subprocess learning
-            model.learn(new_training_interval, callback=CallbackList([checkpoint_callback, reward_graph_callback]), reset_num_timesteps=False) #can ignore callback if training_interval < callback target
+            model.learn(new_training_interval, callback=CallbackList([checkpoint_callback, reward_graph_callback, reward_graph_callback_attacks, reward_graph_callback_defend, reward_graph_callback_kickoff, reward_graph_callback_last_man]), reset_num_timesteps=False) #can ignore callback if training_interval < callback target
             exit_save(model, name)
             if model.num_timesteps >= mmr_model_target_count:
                 model.save(f"src/mmr_models/{model_args[0]}/{model.num_timesteps}")
@@ -342,19 +359,24 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
         done = False
         if count == instances:
             print(">>Waiting to start")
-            start = time()
-            while (time() - start) < INSTANCE_SETUP_TIME * 2 and trainer.is_alive():
-                if not receive_messages.empty():
-                    break
-                sleep(0.1)
-            if not receive_messages.empty() and trainer.is_alive():
-                if receive_messages.get() == 2:
-                    done = True
+            try:
+                start = time()
+                while (time() - start) < INSTANCE_SETUP_TIME * 2 and trainer.is_alive():
+                    if not receive_messages.empty():
+                        break
+                    sleep(0.1)
+                if not receive_messages.empty() and trainer.is_alive():
+                    if receive_messages.get() == 2:
+                        done = True
+            except KeyboardInterrupt:
+                killRL(trainers_RLPIDs)
+                exit()
         if count != instances or not done:
             print(">>Killing trainer: " + model_args[0])
             trainer.terminate()
             while trainer.is_alive():
                 sleep(1)
+            killRL(trainers_RLPIDs)
         else:
             minimiseRL(trainers_RLPIDs)
             print(">>Finished parsing trainer: " + model_args[0])
