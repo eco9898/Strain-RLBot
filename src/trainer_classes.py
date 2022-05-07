@@ -42,7 +42,9 @@ def minimiseRL(targets: List = []):
     for win in Rl:
         # use the window handle to set focus
         #win32gui.SetForegroundWindow(win[0])
-        if win32process.GetWindowThreadProcessId(win[0])[1] in targets:
+        pid = win32process.GetWindowThreadProcessId(win[0])[1]
+        if pid in targets:
+            print ("Minimising:", pid)
             win32gui.ShowWindow(win[0], win32con.SW_MINIMIZE)
 
 def killRL(targets: List = [], blacklist: List = []):
