@@ -429,7 +429,7 @@ if __name__ == "__main__":
     #no try and catch is needed during startup as the starters will clean themselves up
     #RLGym can't have reopened a RL instance yet
     for model_args in models:
-        model_instances[model_args[0]] = start_starter(messages, monitors, model_args)
+        model_instances[model_args[0]] = start_starter(messages, monitors, model_args, initial_instances, all_instances)
         all_instances.extend(model_instances[model_args[0]])
         models_used[model_args[0]] = model_args
     print(">Finished starting trainers")
