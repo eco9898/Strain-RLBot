@@ -33,8 +33,8 @@ total_num_instances = 10
 kickoff_instances = total_num_instances // 3
 match_instances = total_num_instances - kickoff_instances
 models: List = [["kickoff", kickoff_instances], ["match", match_instances]]
-models: List = [["match", total_num_instances]]
-#models: List = [["kickoff", total_num_instances]]
+#models: List = [["match", total_num_instances]]
+models: List = [["kickoff", total_num_instances]]
 
 paging = False
 if total_num_instances > MAX_INSTANCES_NO_PAGING:
@@ -211,6 +211,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 useBoost()
             ),
             #(1.0, 0.2, 0.5, 1.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 0.2, 1.6, 10.0),
+            #(0.17, 0.20, 0.15, 0.24, 0.14, 3.92, 54.70, 6.07, 0.37, 0.19, 0.12, 0.60, 37.27), checkpoint 1
             (0.17, 0.20, 0.15, 0.24, 0.14, 3.92, 54.70, 6.07, 0.37, 0.19, 0.12, 0.60, 37.27),
             reward_log_file)
         match._terminal_conditions = [TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()]
@@ -240,7 +241,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 pickupBoost(),
                 useBoost(),
             ),
-            (5.0, 10.0, 3.0, 1.0, 1.5, 1.0, 5.0, 0.6, 1.0, 1.6, np.sqrt(30)),
+            (0.2, 0.4, 0.2, 4, 55, 6, 0.8, 0.3, 0.15, 0.6, 40),
             reward_log_file)
         #time out after 50 seconds encourage kickoff
         match._terminal_conditions = [TimeoutCondition(fps * 50), NoTouchTimeoutCondition(fps * 20), GoalScoredCondition()]
@@ -396,10 +397,12 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
         while trainer.is_alive():
             sleep(0.1)
 
-def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str, multiprocessing.Process], model_args):
+def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str, multiprocessing.Process], model_args, initial_instances, all_instances):
     name = model_args[0]
     instances = model_args[1]
     print(">Starting trainer: " + model_args[0])
+    blacklist = initial_instances.copy()
+    blacklist.append(all_instances)
     while True:
         messages[name] = multiprocessing.Queue()
         monitors[name] = multiprocessing.Process(target=trainingMonitor, args=[messages[name], model_args])
@@ -414,6 +417,7 @@ def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str
                 print(">Training started: " + name)
                 return messages[name].get()
         print(">Restarting trainer: " + name)
+        killRL(blacklist=blacklist)
 
 if __name__ == "__main__":
     messages: Dict[str, multiprocessing.Queue] = {}
@@ -440,7 +444,7 @@ if __name__ == "__main__":
                     #Kill instances that weren't present before and weren't reported by trainer
                     blacklist = initial_instances.copy()
                     blacklist.append(all_instances)
-                    killRL(blacklist=initial_instances)
+                    killRL(blacklist=blacklist)
                     model_args = models_used[key]
                     #kill trainer's instances
                     killRL(model_instances[key])
