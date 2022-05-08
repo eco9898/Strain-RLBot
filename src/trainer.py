@@ -1,4 +1,5 @@
 import glob
+from os import remove
 from time import sleep, time
 from  datetime import datetime
 import multiprocessing
@@ -26,9 +27,9 @@ from trainer_classes import *
 from modified_states import *
 
 MAX_INSTANCES_NO_PAGING = 5
-WAIT_TIME_NO_PAGING = 22
-WAIT_TIME_PAGING = 40
-INSTANCE_SETUP_TIME = 45
+WAIT_TIME_NO_PAGING = 20
+WAIT_TIME_PAGING = 35
+INSTANCE_SETUP_TIME = 50 #for safety
 
 total_num_instances = 10
 kickoff_instances = total_num_instances // 3
@@ -327,8 +328,8 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
     instances = model_args[1]
     done = False
     trainers_RLPIDs = []
-    initial_RLPIDs = len(getRLInstances())
-    print(">>Initial instances:", initial_RLPIDs)
+    initial_RLPIDs = getRLInstances()
+    print(">>Initial instances:", len(initial_RLPIDs))
     receive_messages = multiprocessing.Queue()
     trainer = multiprocessing.Process(target=start_training, args=[receive_messages, model_args])
     trainer.start()
@@ -340,39 +341,43 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
         receive_messages.get()
         start = time()
         minimise = 0
-        while count < instances  and trainer.is_alive():
-            print(">>Parsing instance:" + str(count + 1) + "+" + str(initial_RLPIDs))
-            curr_count = 0
-            last_curr = 0
-            while (time() - start) // INSTANCE_SETUP_TIME <= count:
+        instance_crashed = False
+        while count < instances  and trainer.is_alive() and not instance_crashed:
+            print(">>Parsing instance:" + str(count + 1) + "+" + str(len(initial_RLPIDs)))
+            new_instance = False
+            if ((time() - start) // INSTANCE_SETUP_TIME > count):
+                print(">>Instance took too long")
+                break
+            while (time() - start) // INSTANCE_SETUP_TIME <= count and not instance_crashed and not new_instance:
                 sleep(0.2)
                 curr_PIDs = getRLInstances()
-                curr_count = len(curr_PIDs) - initial_RLPIDs
-                if curr_count < count or curr_count < last_curr:
-                    #check if our instance or other instance closed
-                    initial_RLPIDs = 0
-                    curr_count = 0
-                    for pid in initial_RLPIDs:
-                        if pid in curr_PIDs:
-                            initial_RLPIDs += 1
-                        else:
-                            curr_count += 1
-                if curr_count > count:
-                    break
-                last_curr = curr_count
-                sleep(0.2)
-            if curr_count > count:
-                count += 1
-                print(">>Instances found:" + str(count) + "+" + str(initial_RLPIDs))
-                trainers_RLPIDs.append(getRLInstances()[-1])
-                if count == instances:
-                    break
-            else:
-                break
+                #clean initial instances
+                to_remove = []
+                for pid in initial_RLPIDs:
+                    if pid not in curr_PIDs:
+                        to_remove.append(pid) #store to remove later
+                for pid in to_remove:
+                    initial_RLPIDs.remove(pid)
+                #Check for new instance
+                for pid in curr_PIDs:
+                    if pid not in trainers_RLPIDs and pid not in initial_RLPIDs:
+                        count +=1
+                        new_instance = True
+                        print(">>Instances found:" + str(count) + "+" + str(len(initial_RLPIDs)))
+                        trainers_RLPIDs.append(pid)
+                        break
+                #Check if instance died
+                for pid in trainers_RLPIDs:
+                    if pid not in curr_PIDs:
+                        #trainer instance was closed
+                        instance_crashed = True
+                        break
             #minimise done windows
             #if (time() - start) // INSTANCE_SETUP_TIME > minimise:
             #    minimiseRL([trainers_RLPIDs[minimise]])
             #    minimise = (time() - start) // INSTANCE_SETUP_TIME
+        if instance_crashed:
+            print(">>Instance Died")
         done = False
         if count == instances:
             print(">>Waiting to start")
@@ -392,30 +397,27 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
         if count != instances or not done:
             print(">>Killing trainer: " + model_args[0])
             trainer.terminate()
-            while trainer.is_alive():
-                sleep(1)
-            killRL(trainers_RLPIDs)
         else:
-            minimiseRL(trainers_RLPIDs)
             print(">>Finished parsing trainer: " + model_args[0])
             send_messages.put(1)
             send_messages.put(trainers_RLPIDs)
             send_messages.close()
-            try:
-                while trainer.is_alive():
-                    sleep(1)
-                #trainer died restart loop
-            except KeyboardInterrupt:
-                #trainer will shut down and save, please wait
-                while trainer.is_alive():
-                    sleep(0.1)
+            sleep(10)
+            minimiseRL(trainers_RLPIDs)
+            #trainer exit process and restart
     except KeyboardInterrupt:
-        #trainer will shut down but has nothing to save, please wait
-        #after it has closed, RL instances will be killed
-        while trainer.is_alive():
-            sleep(0.1)
-        receive_messages.close()
-        send_messages.close()
+        pass
+    except Exception as e:
+        print(">>Error: with trainer parser")
+        #Continue to wait for trainer to die, then exit
+    #trainer will shut down and save, please wait
+    #after it has closed, RL instances will be killed
+    while trainer.is_alive():
+        sleep(1)
+    killRL(trainers_RLPIDs)
+    receive_messages.close()
+    send_messages.close()
+    
 
 def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str, multiprocessing.Process], model_args, initial_instances, all_instances):
     name = model_args[0]
@@ -429,7 +431,7 @@ def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str
         monitors[name].start()
         #wait to open RL instances
         start = time()
-        while (time() - start) < INSTANCE_SETUP_TIME * 1.2 * (instances + 2) and monitors[name].is_alive():
+        while (time() - start) < INSTANCE_SETUP_TIME * (instances + 2) and monitors[name].is_alive():
             if not messages[name].empty():
                 break
         if not messages[name].empty():
@@ -437,7 +439,11 @@ def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str
                 print(">Training started: " + name)
                 return messages[name].get()
         print(">Restarting trainer: " + name)
+        monitors[name].terminate()
+        while monitors[name].is_alive():
+                sleep(0.1)
         killRL(blacklist=blacklist)
+        sleep(5)
 
 if __name__ == "__main__":
     messages: Dict[str, multiprocessing.Queue] = {}
@@ -471,6 +477,7 @@ if __name__ == "__main__":
                     #add logic to detect not all were killed and to search for extra instances, if they match kill them
                     # if an instance crashes RLgym restarts it
                     messages[key].close()
+                    sleep(1)
                     model_instances[key] = start_starter(messages, monitors, model_args, initial_instances, all_instances)
                 #trainer died restart loop
     except KeyboardInterrupt:
