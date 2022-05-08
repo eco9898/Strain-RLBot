@@ -305,6 +305,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             if not closed_messages:
                 send_messages.put(2)
                 send_messages.close()
+                closed_messages = True
             #may need to reset timesteps when you're running a different number of instances than when you saved the model
             #subprocess learning
             model.learn(new_training_interval, callback=CallbackList(rewardList), reset_num_timesteps=False) #can ignore callback if training_interval < callback target
