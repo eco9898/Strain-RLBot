@@ -297,11 +297,14 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     #1mill per 8/9 minutes at 5 instances?
 
     mmr_model_target_count = model.num_timesteps + (mmr_save_frequency - (model.num_timesteps % mmr_save_frequency)) #current steps + remaing steps until mmr model
+    closed_messages = False
     try:
         while True:
             new_training_interval = training_interval - (model.num_timesteps % training_interval) # remaining steps to train interval
             print(">>>Training for %s timesteps" % new_training_interval)
-            send_messages.put(2)
+            if not closed_messages:
+                send_messages.put(2)
+                send_messages.close()
             #may need to reset timesteps when you're running a different number of instances than when you saved the model
             #subprocess learning
             model.learn(new_training_interval, callback=CallbackList(rewardList), reset_num_timesteps=False) #can ignore callback if training_interval < callback target
@@ -312,6 +315,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
 
     except KeyboardInterrupt:
         print(">>>Exiting training")
+    if not closed_messages:
+        send_messages.close()
     print(">>>Saving model")
     exit_save(model, name)
     print(">>>Save complete")
@@ -379,6 +384,7 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
                 if not receive_messages.empty() and trainer.is_alive():
                     if receive_messages.get() == 2:
                         done = True
+                receive_messages.close()
             except KeyboardInterrupt:
                 killRL(trainers_RLPIDs)
                 exit()
@@ -393,6 +399,7 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
             print(">>Finished parsing trainer: " + model_args[0])
             send_messages.put(1)
             send_messages.put(trainers_RLPIDs)
+            send_messages.close()
             try:
                 while trainer.is_alive():
                     sleep(1)
@@ -406,6 +413,8 @@ def trainingMonitor(send_messages: multiprocessing.Queue, model_args):
         #after it has closed, RL instances will be killed
         while trainer.is_alive():
             sleep(0.1)
+        receive_messages.close()
+        send_messages.close()
 
 def start_starter(messages: Dict[str, multiprocessing.Queue], monitors: Dict[str, multiprocessing.Process], model_args, initial_instances, all_instances):
     name = model_args[0]
@@ -460,6 +469,7 @@ if __name__ == "__main__":
                     killRL(model_instances[key])
                     #add logic to detect not all were killed and to search for extra instances, if they match kill them
                     # if an instance crashes RLgym restarts it
+                    messages[key].close()
                     model_instances[key] = start_starter(messages, monitors, model_args)
                 #trainer died restart loop
     except KeyboardInterrupt:
@@ -468,6 +478,7 @@ if __name__ == "__main__":
             #trainers will shut down and save, please wait
             while monitor.is_alive():
                 sleep(0.1)
+            messages[key].close()
             #kill instances reported
             #killRL(all_instances)
             #Kill instances that weren't present before
