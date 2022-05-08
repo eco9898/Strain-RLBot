@@ -258,12 +258,12 @@ class RewardIfLastMan(ConditionalRewardFunction):
                     teammatesAttacking += 1
         return teammatesAttacking == teammates - 1
 
-def isKickoff(player: PlayerData, state: GameState) -> bool:
-    return state.ball.position[0] == 0 and state.ball.position[1] == 0 and np.linalg.norm(player.car_data.linear_velocity) == 0
+def isKickoff(state: GameState) -> bool:
+    return state.ball.position[0] == 0 and state.ball.position[1] == 0 and np.linalg.norm(state.ball.linear_velocity) == 0
 
 class RewardIfKickoff(ConditionalRewardFunction):
     def condition(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> bool:
-        return isKickoff(player, state)
+        return isKickoff(state)
 
 class RewardIfFurthestFromBall(ConditionalRewardFunction):
     def __init__(self, reward_func: RewardFunction, team_only=True):

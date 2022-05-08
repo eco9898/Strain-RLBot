@@ -70,7 +70,7 @@ class Agent:
 
 
     def act(self, player: PlayerData, obs, state: GameState):
-        if (isKickoff(player, state) and self.use_kickoff) or self.kickoff_override:
+        if (isKickoff(state) and self.use_kickoff) or self.kickoff_override:
             action = self.kickoffActor.predict(obs, state, deterministic=True)
             if self.agent_used != "kickoff":
                 self.agent_used = "kickoff"
