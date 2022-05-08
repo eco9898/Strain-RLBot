@@ -7,7 +7,7 @@ from advanced_padder import AdvancedObsPadder
 from rlgym_compat import GameState
 
 
-class RLGymExampleBot(BaseAgent):
+class StrainRLGymBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
 
@@ -75,7 +75,7 @@ class RLGymExampleBot(BaseAgent):
 
         elif ticks_elapsed >= self.tick_skip-2:
             if not self.acted:
-                self.action = self.agent.act(self.current_obs, self.game_state)
+                self.action = self.agent.act(self.game_state.players[self.index], self.current_obs, self.game_state)
                 self.update_controls(self.action)
                 self.acted = True
 

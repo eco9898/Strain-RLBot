@@ -4,12 +4,17 @@ from discrete_act import DiscreteAction
 import glob
 import os.path
 from trainer_classes import isKickoff
+from rlgym.utils.gamestates import PlayerData, GameState
 
 use_latest = True
-use_kickoff = False
+use_kickoff = True
+kickoff_override = True
 
 class Agent:
     def __init__(self):
+        global use_latest, use_kickoff, kickoff_override
+        self.use_kickoff = use_kickoff
+        self.kickoff_override = kickoff_override
         _path = pathlib.Path(__file__).parent.resolve()
         custom_objects = {
             "lr_schedule": 0.000001,
@@ -18,30 +23,50 @@ class Agent:
             "n_envs": 1,
         }
         if use_latest:
-            if use_kickoff:
+            if self.use_kickoff:
                 try:
                     folder_path = str(_path) + '\\models\\kickoff'
                     file_type = r'\*.zip'
                     files = glob.glob(folder_path + file_type)
                     newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
                 except:
-                    use_kickoff = False
+                    self.use_kickoff = False
+                    print("Failed to load newest kickoff")
 
-            self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
-            folder_path = str(_path) + '\\models\\match'
-            file_type = r'\*.zip'
-            files = glob.glob(folder_path + file_type)
-            newest_match_model = max(files, key=os.path.getctime)[0:-4]
+            try:
+                self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
+                folder_path = str(_path) + '\\models\\match'
+                file_type = r'\*.zip'
+                files = glob.glob(folder_path + file_type)
+                newest_match_model = max(files, key=os.path.getctime)[0:-4]
+            except:
+                self.kickoff_override = True
+                print("Failed to load newest match")
+            
 
             self.matchActor = PPO.load(newest_match_model, device='auto', custom_objects=custom_objects)
         else:
-            self.kickoffActor = PPO.load(str(_path) + '/models/kickoff/exit_save', device='auto', custom_objects=custom_objects)
-            self.matchActor = PPO.load(str(_path) + '/models/match/exit_save', device='auto', custom_objects=custom_objects)
+            if self.use_kickoff:
+                try:
+                    self.kickoffActor = PPO.load(str(_path) + '/models/kickoff/exit_save', device='auto', custom_objects=custom_objects)
+                except:
+                    self.use_kickoff = False
+                    print("Failed to load exit kickoff")
+            try:
+                self.matchActor = PPO.load(str(_path) + '/models/match/exit_save', device='auto', custom_objects=custom_objects)
+            except:
+                self.kickoff_override = True
+                print("Failed to load exit match")
+
+        print ("Using latest:", use_latest)
+        print ("Using kickoff:", self.use_kickoff)
+        print ("Kickoff override:", self.kickoff_override)
+            
         self.parser = DiscreteAction()
 
 
-    def act(self, obs, state):
-        if isKickoff() and use_kickoff:
+    def act(self, player: PlayerData, obs, state: GameState):
+        if (isKickoff(player, state) and self.use_kickoff) or self.kickoff_override:
             action = self.kickoffActor.predict(obs, state, deterministic=True)
         else:
             action = self.matchActor.predict(obs, state, deterministic=True)
