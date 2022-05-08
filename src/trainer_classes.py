@@ -22,7 +22,10 @@ def getRLInstances():
             # Check if process name contains the given name string.
             if "RocketLeague.exe".lower() == pinfo['name'].lower() :
                 listOfPIDs.append(pinfo["pid"])
-        except (psutil.NoSuchProcess, psutil.AccessDenied , psutil.ZombieProcess):
+            if "EOSOverlayRenderer-Win64-Shipping.exe".lower() == pinfo['name'].lower():
+                #print ("Killed EOS:", pinfo["pid"])
+                os.kill(pinfo["pid"], signal.SIGTERM)
+        except:# (psutil.NoSuchProcess, psutil.AccessDenied , psutil.ZombieProcess):
             pass
     return listOfPIDs
         #for proc in listOfProcessObjects:
@@ -44,10 +47,12 @@ def minimiseRL(targets: List = []):
         # use the window handle to set focus
         #win32gui.SetForegroundWindow(win[0])
         pid = win32process.GetWindowThreadProcessId(win[0])[1]
+        #print("Found", pid)
+        #print("targets:", targets)
         if pid in targets:
             print ("Minimising:", pid)
             win32gui.ShowWindow(win[0], win32con.SW_MINIMIZE)
-            sleep(0.05)
+            sleep(1)
 
 def killRL(targets: List = [], blacklist: List = []):
     PIDs = getRLInstances()
