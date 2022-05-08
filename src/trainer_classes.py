@@ -1,3 +1,4 @@
+from time import sleep
 import numpy as np
 import psutil
 import win32gui, win32con, win32process, os, signal
@@ -46,6 +47,7 @@ def minimiseRL(targets: List = []):
         if pid in targets:
             print ("Minimising:", pid)
             win32gui.ShowWindow(win[0], win32con.SW_MINIMIZE)
+            sleep(0.05)
 
 def killRL(targets: List = [], blacklist: List = []):
     PIDs = getRLInstances()
