@@ -272,12 +272,14 @@ class RewardIfFurthestFromBall(ConditionalRewardFunction):
 
     def condition(self, player: PlayerData, state: GameState, previous_action: np.ndarray) -> bool:
         dist = np.linalg.norm(player.car_data.position - state.ball.position)
-        for player2 in state.players:
-            if not self.team_only or player2.team_num == player.team_num:
-                dist2 = np.linalg.norm(player2.car_data.position - state.ball.position)
-                if dist2 > dist:
-                    return False
-        return True
+        if len(state.players) > 2:
+            for player2 in state.players:
+                if not self.team_only or player2.team_num == player.team_num:
+                    dist2 = np.linalg.norm(player2.car_data.position - state.ball.position)
+                    if dist2 > dist:
+                        return False
+            return True
+        return False
 
 class RewardIfMidFromBall(ConditionalRewardFunction):
     def __init__(self, reward_func: RewardFunction, team_only=True):
