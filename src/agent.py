@@ -8,7 +8,7 @@ from rlgym.utils.gamestates import PlayerData, GameState
 
 use_latest = True
 use_kickoff = True
-kickoff_override = True
+kickoff_override = False
 
 class Agent:
     def __init__(self):
@@ -61,15 +61,25 @@ class Agent:
         print ("Using latest:", use_latest)
         print ("Using kickoff:", self.use_kickoff)
         print ("Kickoff override:", self.kickoff_override)
-            
+        if self.use_kickoff:
+            self.agent_used = "kickoff"
+        else:
+            self.agent_used = "match"
+        print("Using agent: " + self.agent_used)
         self.parser = DiscreteAction()
 
 
     def act(self, player: PlayerData, obs, state: GameState):
         if (isKickoff(player, state) and self.use_kickoff) or self.kickoff_override:
             action = self.kickoffActor.predict(obs, state, deterministic=True)
+            if self.agent_used != "kickoff":
+                self.agent_used = "kickoff"
+                print("Using agent: " + self.agent_used)
         else:
             action = self.matchActor.predict(obs, state, deterministic=True)
+            if self.agent_used != "match":
+                self.agent_used = "match"
+                print("Using agent: " + self.agent_used)
         x = self.parser.parse_actions(action[0], state)
         return x[0]
 
