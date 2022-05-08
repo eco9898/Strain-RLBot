@@ -470,7 +470,7 @@ if __name__ == "__main__":
                     #add logic to detect not all were killed and to search for extra instances, if they match kill them
                     # if an instance crashes RLgym restarts it
                     messages[key].close()
-                    model_instances[key] = start_starter(messages, monitors, model_args)
+                    model_instances[key] = start_starter(messages, monitors, model_args, initial_instances, all_instances)
                 #trainer died restart loop
     except KeyboardInterrupt:
         for key in monitors:
