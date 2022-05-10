@@ -17,11 +17,11 @@ class ModifiedState(DefaultState):
         # possible kickoff indices are shuffled
         spawn_inds = [0, 1, 2, 3, 4]
         #30% chance to use chosen state all 3 at back
-        if random.randint(1,100) > 70:
+        if random.randint(1,100) > 50:
             spawn_inds = [2, 3, 4]
 
         random.shuffle(spawn_inds)
-
+    
         blue_count = 0
         orange_count = 0
         for car in state_wrapper.cars:
