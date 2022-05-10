@@ -74,12 +74,12 @@ class Agent:
             action = self.kickoffActor.predict(obs, state, deterministic=True)
             if self.agent_used != "kickoff":
                 self.agent_used = "kickoff"
-                print("Using agent: " + self.agent_used)
+                #print("Using agent: " + self.agent_used)
         else:
             action = self.matchActor.predict(obs, state, deterministic=True)
             if self.agent_used != "match":
                 self.agent_used = "match"
-                print("Using agent: " + self.agent_used)
+                #print("Using agent: " + self.agent_used)
         x = self.parser.parse_actions(action[0], state)
         return x[0]
 
