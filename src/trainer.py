@@ -35,8 +35,8 @@ total_num_instances = 10
 kickoff_instances = total_num_instances // 3
 match_instances = total_num_instances - kickoff_instances
 models: List = [["kickoff", kickoff_instances], ["match", match_instances]]
-#models: List = [["match", total_num_instances]]
-models: List = [["kickoff", total_num_instances]]
+models: List = [["match", total_num_instances]]
+#models: List = [["kickoff", total_num_instances]]
 
 paging = False
 if total_num_instances > MAX_INSTANCES_NO_PAGING:
@@ -181,7 +181,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             tick_skip=frame_skip,
             self_play=self_play, #play against its self
             obs_builder=AdvancedObsPadder(3),  # Not that advanced, good default
-            action_parser=DiscreteAction(),  # Discrete > Continuous don't @ me match._reward_fn = CombinedReward(
+            action_parser=DiscreteAction(),  # Discrete > Continuous don't @ me
             reward_function= CombinedReward((), ()),
             terminal_conditions = [TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()],
             state_setter = RandomState()  # Resets to random
@@ -214,7 +214,8 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             ),
             #(1.0, 0.2, 0.5, 1.0, 1.0, 1.0, 1.5, 1.0, 5.0, 0.6, 0.2, 1.6, 10.0),
             #(0.17, 0.20, 0.15, 0.24, 0.14, 3.92, 54.70, 6.07, 0.37, 0.19, 0.12, 0.60, 37.27), checkpoint 1
-            (0.17, 0.20, 0.15, 0.24, 0.14, 3.92, 54.70, 6.07, 0.37, 0.19, 0.12, 0.60, 37.27),
+            #(0.17, 0.20, 0.15, 0.24, 0.14, 3.92, 54.70, 6.07, 0.37, 0.19, 0.12, 0.60, 37.27),
+            (0.14, 0.25, 0.32, 0.19, 0.13, 3.33, 16.66, 4.36, 0.23, 0.22, 0.35, 1.06, 71.35),
             reward_log_file)
         match._terminal_conditions = [TimeoutCondition(fps * 300), NoTouchTimeoutCondition(fps * 45), GoalScoredCondition()]
         match._state_setter = RandomState()  # Resets to random
@@ -243,10 +244,10 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 pickupBoost(),
                 useBoost(),
             ),
-            (0.08, 0.52, 0.82, 27.56, 108.22, 41.05, 0.98, 0.34, 1.43, 3.81, 319.16),
+            (0.08, 0.52, 0.82, 27.56, 108.22, 41.05, 0.2, 0.1, 1.0, 3.81, 319.16),
             reward_log_file)
-        #time out after 50 seconds encourage kickoff
-        match._terminal_conditions = [TimeoutCondition(fps * 50), NoTouchTimeoutCondition(fps * 20), GoalScoredCondition()]
+        #time out after 12 seconds encourage kickoff
+        match._terminal_conditions = [TimeoutCondition(fps * 12), GoalScoredCondition()]
         match._state_setter = ModifiedState()  # Resets to kickoff position
         return match
     
@@ -268,10 +269,10 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     
     rewardList = [checkpoint_callback]
 
-    attack_names = ["vel", 'disToBall', "ballToGoalDis", "ballToGoalVel", "alignGoalOff"]
-    defend_names = ["vel", 'disToBall', "ballToGoalDis", "ballToGoalVel", "alignGoalDef"]
-    last_man_names = ["ballToGoalVel", "alignGoalDef", "disToGoal", 'constant']
-    kickoff_names = ["combination", "def", "lastman", "spacing", "pickupBoost"]
+    attack_names = ["AttVel", 'AttDisToBall', "AttBallToGoalDis", "AttBallToGoalVel", "AttAlignGoalOff"]
+    defend_names = ["DefVel", 'DefDisToBall', "DefBallToGoalDis", "DefBallToGoalVel", "DefAlignGoalDef"]
+    last_man_names = ["LMBallToGoalVel", "LMAlignGoalDef", "LMDisToGoal", 'LMConstant']
+    kickoff_names = ["KOCombination", "KODef", "KOLastman", "KOSpacing", "KOPickupBoost"]
     reward_graph_callback_attacks = SB3CombinedLogRewardCallback(
         attack_names,
         reward_log_file + "_attack")
@@ -285,9 +286,9 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
         kickoff_names,
         reward_log_file + "_kickoff")
     if name == "kickoff":
-        reward_names = ["kickoff", "vel", 'faceball', "event", "jumptouch", "touch", "spacing", "flip", "saveboost", "pickupboost", "useboost"]
+        reward_names = ["KickKickoff", "KickVel", 'KickFaceball', "KickEvent", "KickJumptouch", "KickTouch", "KickSpacing", "KickFlip", "KickSaveboost", "KickPickupboost", "KickUseboost"]
     else:
-        reward_names = ["att", "def", "lastman", "vel", 'faceball', "event", "jumptouch", "touch", "spacing", "flip", "saveboost", "pickupboost", "useboost"]
+        reward_names = ["MatchAtt", "MatchDef", "MatchLastman", "MatchVel", 'MatchFaceball', "MatchEvent", "MatchJumptouch", "MatchTouch", "MatchSpacing", "MatchFlip", "MatchSaveboost", "MatchPickupboost", "MatchUseboost"]
     reward_graph_callback = SB3CombinedLogRewardCallback(
         reward_names,
         reward_log_file)
