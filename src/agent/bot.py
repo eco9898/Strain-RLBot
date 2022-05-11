@@ -15,12 +15,8 @@ class StrainRLGymBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
 
-        # FIXME Hey, botmaker. Start here:
-        # Swap the obs builder if you are using a different one, RLGym's AdvancedObs is also available
         self.obs_builder = AdvancedObsPadder(3)
-        # Your neural network logic goes inside the Agent class, go take a look inside src/agent.py
         self.agent = Agent()
-        # Adjust the tickskip if your agent was trained with a different value
         self.tick_skip = 12
         self.game_state: GameState = None
         self.controls = None
@@ -38,14 +34,14 @@ class StrainRLGymBot(BaseAgent):
         print(f'{self.name} Initialising agent:', self.index)
         # Initialize the rlgym GameState object now that the game is active and the info is available
         self.game_state = GameState(self.get_field_info())
-        self.ticks = self.tick_skip  # So we take an action the first tick
+        self.ticks = self.tick_skip
         self.prev_time = 0
         self.controls = SimpleControllerState()
         self.action = np.zeros(8)
         self.tick_multi = 120
 
     def ignore_players(self):
-        """removes unexpected players"""
+        """removes unexpected players from game_state"""
         opponents = [p for p in self.game_state.players if p.team_num != self.team]
         allies = [p for p in self.game_state.players if p.team_num == self.team and p.car_id != self.index]
         while len(allies) > self.team_size - 1:
@@ -66,13 +62,6 @@ class StrainRLGymBot(BaseAgent):
 
         if not self.observed:
             self.game_state.decode(packet, ticks_elapsed)
-            if packet.game_info.is_kickoff_pause and not packet.game_info.is_round_active:
-                ''' This would be a good time to reset the obs/action if you're using a stacking obs
-                    otherwise it shouldn't really matter'''
-                #self.obs_builder.reset(self.game_state)
-                #self.action = np.zeros(8)
-                #self.update_controls(self.action)
-                pass
             self.ignore_players()
             self.current_obs = self.obs_builder.build_obs(self.game_state.players[self.index], self.game_state, self.action)
             self.observed = True
@@ -92,7 +81,6 @@ class StrainRLGymBot(BaseAgent):
 
 
     def update_controls(self, action):
-        #print(f'{action} update controls:', self.index)
         self.controls.throttle = action[0]
         self.controls.steer = action[1]
         self.controls.pitch = action[2]
