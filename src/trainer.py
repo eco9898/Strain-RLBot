@@ -1,5 +1,4 @@
 import glob
-from os import remove
 from time import sleep, time
 from  datetime import datetime
 import multiprocessing
@@ -19,7 +18,7 @@ from rlgym.utils.reward_functions.common_rewards.player_ball_rewards import *
 from rlgym.utils.reward_functions.common_rewards.ball_goal_rewards import *
 from rlgym.utils.reward_functions.common_rewards.conditional_rewards import *
 from rlgym.utils.reward_functions import CombinedReward
-from rlgym_tools.sb3_utils.sb3_log_reward import *
+from rlgym_tools.sb3_utils.sb3_log_reward import * # line 21 = if len(returns) > 0: # my own fix
 
 from advanced_padder import AdvancedObsPadder
 from discrete_act import DiscreteAction
