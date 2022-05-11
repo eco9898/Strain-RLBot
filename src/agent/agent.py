@@ -1,10 +1,14 @@
 from stable_baselines3 import PPO
-import pathlib
-from discrete_act import DiscreteAction
-import glob
-import os.path
-from trainer_classes import isKickoff
+import pathlib, sys, glob, os.path
 from rlgym.utils.gamestates import PlayerData, GameState
+
+parent_directory = str(pathlib.Path(__file__).parent.parent.resolve())
+sys.path.append(parent_directory)
+
+from utils.discrete_act import DiscreteAction
+from utils.util_classes import isKickoff
+
+data_location = parent_directory + "/data/"
 
 use_latest = True
 use_kickoff = True
@@ -15,7 +19,6 @@ class Agent:
         global use_latest, use_kickoff, kickoff_override
         self.use_kickoff = use_kickoff
         self.kickoff_override = kickoff_override
-        _path = pathlib.Path(__file__).parent.resolve()
         custom_objects = {
             "lr_schedule": 0.000001,
             "clip_range": .02,
@@ -25,7 +28,7 @@ class Agent:
         if use_latest:
             if self.use_kickoff:
                 try:
-                    folder_path = str(_path) + '\\models\\kickoff'
+                    folder_path = data_location + '/models/kickoff'
                     file_type = r'\*.zip'
                     files = glob.glob(folder_path + file_type)
                     newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
@@ -35,7 +38,7 @@ class Agent:
 
             try:
                 self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
-                folder_path = str(_path) + '\\models\\match'
+                folder_path = data_location + '/models/match'
                 file_type = r'\*.zip'
                 files = glob.glob(folder_path + file_type)
                 newest_match_model = max(files, key=os.path.getctime)[0:-4]
@@ -48,12 +51,12 @@ class Agent:
         else:
             if self.use_kickoff:
                 try:
-                    self.kickoffActor = PPO.load(str(_path) + '/models/kickoff/exit_save', device='auto', custom_objects=custom_objects)
+                    self.kickoffActor = PPO.load(data_location + '/models/kickoff/exit_save', device='auto', custom_objects=custom_objects)
                 except:
                     self.use_kickoff = False
                     print("Failed to load exit kickoff")
             try:
-                self.matchActor = PPO.load(str(_path) + '/models/match/exit_save', device='auto', custom_objects=custom_objects)
+                self.matchActor = PPO.load(data_location + '/models/match/exit_save', device='auto', custom_objects=custom_objects)
             except:
                 self.kickoff_override = True
                 print("Failed to load exit match")

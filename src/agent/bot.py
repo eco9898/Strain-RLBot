@@ -2,10 +2,14 @@ from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.utils.structures.game_data_struct import GameTickPacket
 
 import numpy as np
-from agent import Agent
-from advanced_padder import AdvancedObsPadder
+import pathlib, sys
 from rlgym_compat import GameState
 
+
+from agent import Agent
+parent_directory = str(pathlib.Path(__file__).parent.parent.resolve())
+sys.path.append(parent_directory)
+from utils.advanced_padder import AdvancedObsPadder
 
 class StrainRLGymBot(BaseAgent):
     def __init__(self, name, team, index):

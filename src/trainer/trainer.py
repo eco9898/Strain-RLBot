@@ -1,7 +1,6 @@
-import glob
+import glob, sys, multiprocessing, pathlib
 from time import sleep, time
 from  datetime import datetime
-import multiprocessing
 from typing import Dict
 import numpy as np
 from rlgym.envs import Match
@@ -10,7 +9,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from stable_baselines3.common.vec_env import VecMonitor, VecNormalize, VecCheckNan
 from stable_baselines3.ppo import MlpPolicy
 
-from rlgym.utils.state_setters import DefaultState, RandomState
+from rlgym.utils.state_setters import RandomState
 from rlgym.utils.terminal_conditions.common_conditions import *
 from rlgym_tools.sb3_utils import SB3MultipleInstanceEnv
 from rlgym.utils.reward_functions.common_rewards.misc_rewards import *
@@ -20,10 +19,14 @@ from rlgym.utils.reward_functions.common_rewards.conditional_rewards import *
 from rlgym.utils.reward_functions import CombinedReward
 from rlgym_tools.sb3_utils.sb3_log_reward import * # line 21 = if len(returns) > 0: # my own fix
 
-from advanced_padder import AdvancedObsPadder
-from discrete_act import DiscreteAction
-from trainer_classes import *
-from modified_states import *
+
+parent_directory = str(pathlib.Path(__file__).parent.parent.resolve())
+sys.path.append(parent_directory)
+
+from utils.advanced_padder import AdvancedObsPadder
+from utils.discrete_act import DiscreteAction
+from utils.util_classes import *
+from utils.modified_states import *
 
 MAX_INSTANCES_NO_PAGING = 5
 WAIT_TIME_NO_PAGING = 20
@@ -36,6 +39,8 @@ match_instances = total_num_instances - kickoff_instances
 models: List = [["kickoff", kickoff_instances], ["match", match_instances]]
 models: List = [["match", total_num_instances]]
 #models: List = [["kickoff", total_num_instances]]
+
+data_location = parent_directory + "/data/"
 
 paging = False
 if total_num_instances > MAX_INSTANCES_NO_PAGING:
@@ -51,7 +56,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     frame_skip = 12          # Number of ticks to repeat an action
     half_life_seconds = 5   # Easier to conceptualize, after this many seconds the reward discount is 0.5
 
-    reward_log_file = "src/logs/" + name + "/reward_" + str(datetime.now().hour) + "-" + str(datetime.now().minute)
+    reward_log_file = data_location + "logs/" + name + "/reward_" + str(datetime.now().hour) + "-" + str(datetime.now().minute)
 
     fps = 120/frame_skip #120 / frame_skip
     gamma = np.exp(np.log(0.5) / (fps * half_life_seconds))  # Quick mafs
@@ -61,15 +66,18 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
         agents_per_match = 2*team_size
     else:
         agents_per_match = team_size
+    n_env = agents_per_match * num_instances
     print(">>>Wait time:        ", wait_time)
     print(">>># of instances:   ", num_instances)
+    print(">>># of trainers:    ", n_env)
     print(">>>Paging:           ", paging)
-    n_env = agents_per_match * num_instances
     print(">>># of env:         ", n_env)
     target_steps = int(1_000_000)#*(num_instances/total_num_instances))
     steps = target_steps//n_env #making sure the experience counts line up properly
     print(">>>Steps:            ", steps)
     batch_size = (100_000//(steps))*(steps) #getting the batch size down to something more manageable - 80k in this case at 5 instances, but 25k at 16 instances
+    if batch_size == 0:
+        batch_size = steps
     print(">>>Batch size:       ", batch_size)
     training_interval = int(25_000_000)#*(num_instances/total_num_instances))
     print(">>>Training interval:", training_interval)
@@ -132,11 +140,11 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
         reward_log_file + "_kickoff")
 
     def exit_save(model, name: str):
-        model.save("src/models/" + name + "/exit_save")
+        model.save(data_location + "models/" + name + "/exit_save")
 
     def load_save(name: str, env, steps, batch_size, MlpPolicy, gamma):
         try:
-            folder_path = 'src\\models\\' + name
+            folder_path = data_location + 'models/' + name
             file_type = r'\*.zip'
             files = glob.glob(folder_path + file_type)
             newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
@@ -146,7 +154,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 device="auto",
                 #custom_objects={"n_envs": env.num_envs}, #automatically adjusts to users changing instance count, may encounter shaping error otherwise
                 #If you need to adjust parameters mid training, you can use the below example as a guide
-                custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None, "tensorboard_log": "src/logs/" + name}
+                custom_objects={"n_envs": env.num_envs, "n_steps": steps, "batch_size": batch_size, "_last_obs": None, "tensorboard_log": data_location + "logs/" + name}
             )
             print(">>>Loaded previous exit save.")
             return model
@@ -170,7 +178,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
                 verbose=3,                   # Print out all the info as we're going
                 batch_size=batch_size,             # Batch size as high as possible within reason
                 n_steps=steps,                # Number of steps to perform before optimizing network
-                tensorboard_log="src/logs/" + name,  # `tensorboard --logdir out/logs` in terminal to see graphs
+                tensorboard_log=data_location + "/logs/" + name,  # `tensorboard --logdir out/logs` in terminal to see graphs
                 device="auto"                # Uses GPU if available
             )
 
@@ -264,7 +272,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
     # Save model every so often
     # Divide by num_envs (number of agents) because callback only increments every time all agents have taken a step
     # This saves to specified folder with a specified name
-    checkpoint_callback = CheckpointCallback(round(1_000_000*(num_instances/total_num_instances) / env.num_envs), save_path="src/models/" + name, name_prefix="rl_model") # backup every 5 mins
+    checkpoint_callback = CheckpointCallback(round(1_000_000*(num_instances/total_num_instances) / env.num_envs), save_path=data_location + "models/" + name, name_prefix="rl_model") # backup every 5 mins
     
     rewardList = [checkpoint_callback]
 
@@ -312,7 +320,7 @@ def start_training(send_messages: multiprocessing.Queue, model_args: List):
             model.learn(new_training_interval, callback=CallbackList(rewardList), reset_num_timesteps=False) #can ignore callback if training_interval < callback target
             exit_save(model, name)
             if model.num_timesteps >= mmr_model_target_count:
-                model.save(f"src/mmr_models/{model_args[0]}/{model.num_timesteps}")
+                model.save(f"{data_location}mmr_models/{model_args[0]}/{model.num_timesteps}")
                 mmr_model_target_count += mmr_save_frequency
 
     except KeyboardInterrupt:
