@@ -1,6 +1,6 @@
-src/backup*
-src/logs*
-src/*models*
+#src/backup*
+#src/logs*
+#src/*models*
 
 #auto-generated
 # Byte-compiled / optimized / DLL files
