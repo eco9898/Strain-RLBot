@@ -32,22 +32,21 @@ class Agent:
                     file_type = r'\*.zip'
                     files = glob.glob(folder_path + file_type)
                     newest_kickoff_model = max(files, key=os.path.getctime)[0:-4]
+                    self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
                 except:
                     self.use_kickoff = False
                     print("Failed to load newest kickoff")
 
             try:
-                self.kickoffActor = PPO.load(newest_kickoff_model, device='auto', custom_objects=custom_objects)
                 folder_path = data_location + '/models/match'
                 file_type = r'\*.zip'
                 files = glob.glob(folder_path + file_type)
                 newest_match_model = max(files, key=os.path.getctime)[0:-4]
+                self.matchActor = PPO.load(newest_match_model, device='auto', custom_objects=custom_objects)
             except:
                 self.kickoff_override = True
                 print("Failed to load newest match")
-            
-
-            self.matchActor = PPO.load(newest_match_model, device='auto', custom_objects=custom_objects)
+                        
         else:
             if self.use_kickoff:
                 try:
