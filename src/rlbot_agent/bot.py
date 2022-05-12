@@ -6,10 +6,10 @@ import pathlib, sys
 from rlgym_compat import GameState
 
 
-from agent import Agent
 parent_directory = str(pathlib.Path(__file__).parent.parent.resolve())
 sys.path.append(parent_directory)
 from utils.advanced_padder import AdvancedObsPadder
+from rlbot_agent.agent import Agent
 
 class StrainRLGymBot(BaseAgent):
     def __init__(self, name, team, index):
